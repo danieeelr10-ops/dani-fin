@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DANI FIN">
+<meta name="theme-color" content="#0f1117">
+<link rel="manifest" href="manifest.json">
+<title>DANI FIN</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: rgba(255,255,255,0.08);
+    --text: #f0f0f5;
+    --muted: #7c7f9e;
+    --accent: #6c63ff;
+    --accent2: #a78bfa;
+    --green: #34d399;
+    --red: #f87171;
+    --amber: #fbbf24;
+    --blue: #60a5fa;
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'SF Pro Display', -apple-system, 'Segoe UI', sans-serif; overscroll-behavior: none; }
+
+  /* NAV */
+  .nav { position: fixed; bottom: 0; left: 0; right: 0; height: 72px; background: var(--surface); border-top: 1px solid var(--border); display: flex; z-index: 100; padding-bottom: env(safe-area-inset-bottom); }
+  .nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: none; border: none; color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: 0.03em; cursor: pointer; transition: color 0.2s; padding-top: 8px; }
+  .nav-btn.active { color: var(--accent2); }
+  .nav-btn svg { width: 22px; height: 22px; stroke-width: 1.8; }
+
+  /* PAGES */
+  .page { display: none; height: calc(100vh - 72px); overflow-y: auto; padding: 0 0 24px; -webkit-overflow-scrolling: touch; }
+  .page.active { display: block; }
+
+  /* HEADER */
+  .page-header { padding: 20px 20px 12px; position: sticky; top: 0; background: var(--bg); z-index: 10; }
+  .page-title { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+  .page-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  /* CARDS */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin: 0 16px 12px; }
+  .card-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+
+  /* FORM */
+  .form-group { margin-bottom: 14px; }
+  .form-label { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; display: block; }
+  .form-input, .form-select { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-size: 16px; padding: 13px 14px; outline: none; -webkit-appearance: none; appearance: none; font-family: inherit; transition: border-color 0.2s; }
+  .form-input:focus, .form-select:focus { border-color: var(--accent); }
+  .form-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237c7f9e' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
+  .form-input::placeholder { color: var(--muted); }
+
+  /* AMOUNT INPUT special */
+  .amount-wrap { position: relative; }
+  .amount-prefix { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 20px; font-weight: 600; color: var(--muted); }
+  .amount-input { padding-left: 30px !important; font-size: 28px !important; font-weight: 700 !important; letter-spacing: -0.5px; }
+
+  /* TOGGLE TYPE */
+  .type-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .type-btn { padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface2); color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; text-align: center; }
+  .type-btn.active-egreso { background: rgba(248,113,113,0.15); border-color: var(--red); color: var(--red); }
+  .type-btn.active-ingreso { background: rgba(52,211,153,0.15); border-color: var(--green); color: var(--green); }
+
+  /* SUBMIT BTN */
+  .btn-primary { width: 100%; padding: 16px; background: var(--accent); border: none; border-radius: var(--radius-sm); color: #fff; font-size: 16px; font-weight: 700; letter-spacing: 0.02em; cursor: pointer; transition: opacity 0.2s, transform 0.1s; margin-top: 8px; }
+  .btn-primary:active { transform: scale(0.98); opacity: 0.9; }
+  .btn-secondary { width: 100%; padding: 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+
+  /* SECTION TABS */
+  .section-tabs { display: flex; gap: 8px; padding: 0 16px 12px; overflow-x: auto; scrollbar-width: none; }
+  .section-tabs::-webkit-scrollbar { display: none; }
+  .tab { padding: 7px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; white-space: nowrap; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); cursor: pointer; transition: all 0.2s; }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* RECORD LIST */
+  .record { display: flex; align-items: center; gap: 12px; padding: 13px 18px; border-bottom: 1px solid var(--border); }
+  .record:last-child { border-bottom: none; }
+  .record-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 18px; }
+  .record-info { flex: 1; min-width: 0; }
+  .record-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .record-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .record-amount { font-size: 15px; font-weight: 700; flex-shrink: 0; }
+  .record-amount.egreso { color: var(--red); }
+  .record-amount.ingreso { color: var(--green); }
+  .empty-state { text-align: center; padding: 48px 24px; color: var(--muted); font-size: 14px; }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+
+  /* MERCADO */
+  .mercado-item { display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid var(--border); }
+  .mercado-item:last-child { border-bottom: none; }
+  .mercado-num { width: 24px; height: 24px; border-radius: 8px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--muted); flex-shrink: 0; }
+  .mercado-info { flex: 1; }
+  .mercado-name { font-size: 14px; font-weight: 500; }
+  .mercado-sub { font-size: 11px; color: var(--muted); }
+  .mercado-price { font-size: 14px; font-weight: 700; color: var(--amber); }
+  .mercado-del { width: 28px; height: 28px; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+  .mercado-del:active { background: rgba(248,113,113,0.15); color: var(--red); }
+  .mercado-total { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-top: 1px solid var(--border); background: var(--surface2); border-radius: 0 0 var(--radius) var(--radius); }
+  .mercado-total-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .mercado-total-amount { font-size: 20px; font-weight: 800; color: var(--amber); }
+
+  /* METAS */
+  .meta-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin: 0 16px 12px; }
+  .meta-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+  .meta-name { font-size: 16px; font-weight: 700; }
+  .meta-badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+  .badge-ahorro { background: rgba(96,165,250,0.15); color: var(--blue); }
+  .badge-inversion { background: rgba(167,139,250,0.15); color: var(--accent2); }
+  .meta-progress-wrap { height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
+  .meta-progress-bar { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+  .bar-ahorro { background: var(--blue); }
+  .bar-inversion { background: var(--accent2); }
+  .meta-amounts { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .meta-current { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 20px; font-size: 14px; font-weight: 500; z-index: 1000; opacity: 0; transition: all 0.3s; white-space: nowrap; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--green); color: var(--green); }
+  .toast.error { border-color: var(--red); color: var(--red); }
+
+  /* EXPORT */
+  .export-section { margin: 0 16px 12px; }
+  .export-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .export-row { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; }
+  .export-row:last-child { border-bottom: none; }
+  .export-row:active { background: var(--surface2); }
+  .export-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .export-info { flex: 1; }
+  .export-name { font-size: 14px; font-weight: 600; }
+  .export-desc { font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .chevron { color: var(--muted); }
+
+  /* STATS MINI */
+  .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 16px 12px; }
+  .stat-mini { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; }
+  .stat-mini-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .stat-mini-value { font-size: 20px; font-weight: 800; margin-top: 4px; }
+  .text-green { color: var(--green); }
+  .text-red { color: var(--red); }
+  .text-amber { color: var(--amber); }
+  .text-blue { color: var(--blue); }
+  .text-purple { color: var(--accent2); }
+
+  /* MES SELECTOR */
+  .mes-pill-wrap { display: flex; gap: 8px; padding: 0 16px 12px; overflow-x: auto; scrollbar-width: none; }
+  .mes-pill-wrap::-webkit-scrollbar { display: none; }
+  .mes-pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; background: var(--surface2); color: var(--muted); border: 1px solid var(--border); cursor: pointer; white-space: nowrap; }
+  .mes-pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* CONFIG GOOGLE */
+  .config-wrap { padding: 0 16px; }
+  .config-tip { background: rgba(108,99,255,0.1); border: 1px solid rgba(108,99,255,0.3); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 16px; font-size: 13px; line-height: 1.6; color: #c4bfff; }
+  .config-tip strong { color: var(--accent2); display: block; margin-bottom: 4px; }
+  .step-list { list-style: none; counter-reset: steps; }
+  .step-list li { counter-increment: steps; display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 14px; align-items: flex-start; }
+  .step-list li:last-child { border-bottom: none; }
+  .step-num { width: 24px; height: 24px; border-radius: 8px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; flex-shrink: 0; }
+  code { background: var(--surface2); padding: 2px 6px; border-radius: 5px; font-size: 12px; font-family: 'SF Mono', monospace; color: var(--amber); word-break: break-all; }
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- PAGE: REGISTRAR -->
+<div class="page active" id="page-registro">
+  <div class="page-header">
+    <div class="page-title">Registrar</div>
+    <div class="page-sub" id="fecha-hoy"></div>
+  </div>
+
+  <div class="card">
+    <div class="type-toggle">
+      <button class="type-btn active-egreso" id="btn-egreso" onclick="setTipo('Egreso')">↓ Egreso</button>
+      <button class="type-btn" id="btn-ingreso" onclick="setTipo('Ingreso')">↑ Ingreso</button>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Monto</label>
+      <div class="amount-wrap">
+        <span class="amount-prefix">$</span>
+        <input class="form-input amount-input" type="number" id="monto" placeholder="0" inputmode="decimal">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Categoría</label>
+      <select class="form-select" id="categoria" onchange="onCatChange()">
+        <option value="">— Selecciona —</option>
+        <optgroup label="Egresos">
+          <option>Mercado</option><option>Transporte</option><option>Salidas</option>
+          <option>Salud</option><option>Hogar</option><option>Entretenimiento</option>
+          <option>Educacion</option><option>Vacaciones</option><option>Regalos</option>
+          <option>Extras</option><option>Vehiculos</option><option>Familia</option>
+          <option>Inversion</option><option>Ahorro</option>
+        </optgroup>
+        <optgroup label="Ingresos">
+          <option>Sueldo</option><option>Trabajo</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Concepto / Descripción</label>
+      <input class="form-input" type="text" id="concepto" placeholder="Ej: Nequi Dani, Vittoria...">
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Cuenta</label>
+        <select class="form-select" id="cuenta">
+          <option value="">— —</option>
+          <option>Nequi</option>
+          <option>T.C</option>
+          <option>Daviplata</option>
+          <option>Nu</option>
+          <option>Efectivo</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Tipo</label>
+        <select class="form-select" id="tipo-mov">
+          <option>Variable</option>
+          <option>Fijo</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div style="padding: 0 16px">
+    <button class="btn-primary" onclick="guardarTransaccion()">Guardar</button>
+  </div>
+</div>
+
+<!-- PAGE: MERCADO -->
+<div class="page" id="page-mercado">
+  <div class="page-header">
+    <div class="page-title">Mercado</div>
+    <div class="page-sub">Registro detallado de compras</div>
+  </div>
+
+  <div class="mes-pill-wrap" id="mes-pills-mercado"></div>
+
+  <div class="card" style="padding: 0; overflow: hidden;">
+    <div style="padding: 14px 18px; display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border);">
+      <span style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Items</span>
+      <button onclick="showAddMercado()" style="background:var(--accent);border:none;color:#fff;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">+ Agregar</button>
+    </div>
+    <div id="mercado-list"></div>
+    <div class="mercado-total">
+      <span class="mercado-total-label">Total del mes</span>
+      <span class="mercado-total-amount" id="mercado-total">$0</span>
+    </div>
+  </div>
+
+  <!-- ADD MERCADO FORM (hidden by default) -->
+  <div id="mercado-form" style="display:none">
+    <div class="card">
+      <div class="card-label">Nuevo item</div>
+      <div class="form-group">
+        <label class="form-label">Tienda / Concepto</label>
+        <input class="form-input" type="text" id="m-concepto" placeholder="Ej: Éxito, ARA...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Monto</label>
+        <div class="amount-wrap">
+          <span class="amount-prefix">$</span>
+          <input class="form-input amount-input" type="number" id="m-monto" placeholder="0" inputmode="decimal">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label class="form-label">Cuenta</label>
+          <select class="form-select" id="m-cuenta">
+            <option>T.C</option><option>Nequi</option><option>Efectivo</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Notas</label>
+          <input class="form-input" type="text" id="m-notas" placeholder="Opcional">
+        </div>
+      </div>
+      <button class="btn-primary" onclick="guardarMercado()">Agregar item</button>
+      <button class="btn-secondary" onclick="hideMercadoForm()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: HISTORIAL -->
+<div class="page" id="page-historial">
+  <div class="page-header">
+    <div class="page-title">Historial</div>
+  </div>
+
+  <div class="mes-pill-wrap" id="mes-pills-historial"></div>
+
+  <div class="stats-row" id="stats-historial">
+    <div class="stat-mini"><div class="stat-mini-label">Ingresos</div><div class="stat-mini-value text-green" id="stat-ing">$0</div></div>
+    <div class="stat-mini"><div class="stat-mini-label">Egresos</div><div class="stat-mini-value text-red" id="stat-eg">$0</div></div>
+  </div>
+
+  <div class="card" style="padding: 0; overflow: hidden;">
+    <div id="historial-list"></div>
+  </div>
+</div>
+
+<!-- PAGE: EXPORTAR -->
+<div class="page" id="page-exportar">
+  <div class="page-header">
+    <div class="page-title">Exportar</div>
+    <div class="page-sub">Lleva tus datos al Excel</div>
+  </div>
+
+  <div class="mes-pill-wrap" id="mes-pills-export"></div>
+
+  <div class="export-section">
+    <div class="export-card">
+      <div class="export-row" onclick="exportarCSV('transacciones')">
+        <div class="export-icon" style="background:rgba(52,211,153,0.15)">📊</div>
+        <div class="export-info">
+          <div class="export-name">Transacciones (CSV)</div>
+          <div class="export-desc">Formato listo para pegar en Base</div>
+        </div>
+        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="export-row" onclick="exportarCSV('mercado')">
+        <div class="export-icon" style="background:rgba(251,191,36,0.15)">🛒</div>
+        <div class="export-info">
+          <div class="export-name">Mercado (CSV)</div>
+          <div class="export-desc">Para hoja 🛒 Mercado</div>
+        </div>
+        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="export-row" onclick="copiarJSON()">
+        <div class="export-icon" style="background:rgba(108,99,255,0.15)">📋</div>
+        <div class="export-info">
+          <div class="export-name">Copiar JSON</div>
+          <div class="export-desc">Todo el mes al portapapeles</div>
+        </div>
+        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="export-section" style="margin-top: 8px;">
+    <div class="card-label" style="margin: 0 0 8px; padding: 0 2px;">Google Sheets (recomendado)</div>
+    <div class="export-card">
+      <div class="export-row" onclick="showSheetConfig()">
+        <div class="export-icon" style="background:rgba(52,211,153,0.15)">⚙️</div>
+        <div class="export-info">
+          <div class="export-name">Configurar Google Sheet</div>
+          <div class="export-desc" id="sheet-config-status">No configurado</div>
+        </div>
+        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="export-row" onclick="enviarASheets()">
+        <div class="export-icon" style="background:rgba(96,165,250,0.15)">☁️</div>
+        <div class="export-info">
+          <div class="export-name">Enviar a Google Sheets</div>
+          <div class="export-desc">Sincroniza el mes actual</div>
+        </div>
+        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sheet config panel -->
+  <div id="sheet-config-panel" style="display:none; padding: 0 16px; margin-top: 8px;">
+    <div class="card" style="margin: 0;">
+      <div class="card-label">Configurar Google Sheet</div>
+      <div class="config-tip">
+        <strong>¿Cómo obtener el ID?</strong>
+        Abre tu Google Sheet → la URL es: docs.google.com/spreadsheets/d/<code>ID_AQUI</code>/edit
+      </div>
+      <div class="form-group">
+        <label class="form-label">Sheet ID</label>
+        <input class="form-input" type="text" id="sheet-id-input" placeholder="1BxiMVs0XRA...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Script URL (Web App)</label>
+        <input class="form-input" type="text" id="script-url-input" placeholder="https://script.google.com/macros/s/...">
+      </div>
+      <button class="btn-primary" onclick="guardarSheetConfig()">Guardar configuración</button>
+
+      <div style="margin-top: 20px;">
+        <div class="card-label" style="margin-bottom: 10px;">Instrucciones Google Apps Script</div>
+        <ol class="step-list">
+          <li><span class="step-num">1</span><span>Abre <strong>script.google.com</strong> → Nuevo proyecto</span></li>
+          <li><span class="step-num">2</span><span>Pega el script que puedes copiar abajo</span></li>
+          <li><span class="step-num">3</span><span>Guardar → Implementar → Nueva implementación → Aplicación web → Acceso: Cualquier persona</span></li>
+          <li><span class="step-num">4</span><span>Copia la URL de la web app y pégala arriba</span></li>
+        </ol>
+        <button class="btn-secondary" onclick="copiarScript()">📋 Copiar script</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="height: 20px;"></div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="nav">
+  <button class="nav-btn active" onclick="goTo('registro', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    Registrar
+  </button>
+  <button class="nav-btn" onclick="goTo('mercado', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+    Mercado
+  </button>
+  <button class="nav-btn" onclick="goTo('historial', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+    Historial
+  </button>
+  <button class="nav-btn" onclick="goTo('exportar', this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    Exportar
+  </button>
+</nav>
+
+<script>
+// ─── STATE ───────────────────────────────────────────
+const MESES = ['M1','M2','M3','M4','M5','M6','M7','M8','M9','M10','M11','M12'];
+const MES_NAMES = ['Enero','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+function getMesActual() {
+  return 'M' + (new Date().getMonth() + 1);
+}
+
+let state = {
+  tipoActual: 'Egreso',
+  mesHistorial: getMesActual(),
+  mesMercado: getMesActual(),
+  mesExport: getMesActual(),
+  transacciones: [],
+  mercado: [],
+  sheetId: '',
+  scriptUrl: ''
+};
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem('dani_fin_v2');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      state.transacciones = parsed.transacciones || [];
+      state.mercado = parsed.mercado || [];
+      state.sheetId = parsed.sheetId || '';
+      state.scriptUrl = parsed.scriptUrl || '';
+    }
+  } catch(e) {}
+}
+
+function saveState() {
+  localStorage.setItem('dani_fin_v2', JSON.stringify({
+    transacciones: state.transacciones,
+    mercado: state.mercado,
+    sheetId: state.sheetId,
+    scriptUrl: state.scriptUrl
+  }));
+}
+
+// ─── NAVIGATION ──────────────────────────────────────
+function goTo(page, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  btn.classList.add('active');
+  if (page === 'historial') renderHistorial();
+  if (page === 'mercado') renderMercado();
+  if (page === 'exportar') renderExportMes();
+}
+
+// ─── TIPO TOGGLE ────────────────────────────────────
+function setTipo(tipo) {
+  state.tipoActual = tipo;
+  const btnE = document.getElementById('btn-egreso');
+  const btnI = document.getElementById('btn-ingreso');
+  btnE.className = 'type-btn' + (tipo === 'Egreso' ? ' active-egreso' : '');
+  btnI.className = 'type-btn' + (tipo === 'Ingreso' ? ' active-ingreso' : '');
+  if (tipo === 'Ingreso') {
+    document.getElementById('categoria').value = 'Sueldo';
+  }
+}
+
+function onCatChange() {
+  const cat = document.getElementById('categoria').value;
+  const ingresos = ['Sueldo', 'Trabajo'];
+  if (ingresos.includes(cat)) setTipo('Ingreso');
+  else if (cat) setTipo('Egreso');
+}
+
+// ─── FECHA ───────────────────────────────────────────
+function formatFecha(d) {
+  return d.toLocaleDateString('es-CO', {weekday:'long', day:'numeric', month:'long'});
+}
+function formatFechaShort(d) {
+  return d.toLocaleDateString('es-CO', {day:'2-digit', month:'2-digit'});
+}
+function formatMoney(n) {
+  return '$' + Math.abs(n).toLocaleString('es-CO');
+}
+
+// ─── GUARDAR TRANSACCION ─────────────────────────────
+function guardarTransaccion() {
+  const monto = parseFloat(document.getElementById('monto').value);
+  const categoria = document.getElementById('categoria').value;
+  const concepto = document.getElementById('concepto').value.trim();
+  const cuenta = document.getElementById('cuenta').value;
+  const tipoMov = document.getElementById('tipo-mov').value;
+
+  if (!monto || monto <= 0) { showToast('Ingresa un monto válido', 'error'); return; }
+  if (!categoria) { showToast('Selecciona una categoría', 'error'); return; }
+
+  const now = new Date();
+  const mes = getMesActual();
+  const montoFinal = state.tipoActual === 'Egreso' ? -Math.abs(monto) : Math.abs(monto);
+
+  const tx = {
+    id: Date.now(),
+    fecha: now.toISOString(),
+    mes,
+    tipo: tipoMov,
+    movimiento: state.tipoActual,
+    categoria,
+    concepto: concepto || categoria,
+    total: montoFinal,
+    pago: montoFinal,
+    cuenta: cuenta || ''
+  };
+
+  state.transacciones.unshift(tx);
+  saveState();
+
+  document.getElementById('monto').value = '';
+  document.getElementById('concepto').value = '';
+
+  showToast('✓ Guardado correctamente', 'success');
+}
+
+// ─── MERCADO ─────────────────────────────────────────
+function showAddMercado() {
+  document.getElementById('mercado-form').style.display = 'block';
+  document.getElementById('m-concepto').focus();
+}
+function hideMercadoForm() {
+  document.getElementById('mercado-form').style.display = 'none';
+  document.getElementById('m-concepto').value = '';
+  document.getElementById('m-monto').value = '';
+  document.getElementById('m-notas').value = '';
+}
+
+function guardarMercado() {
+  const concepto = document.getElementById('m-concepto').value.trim();
+  const monto = parseFloat(document.getElementById('m-monto').value);
+  const cuenta = document.getElementById('m-cuenta').value;
+  const notas = document.getElementById('m-notas').value.trim();
+
+  if (!concepto) { showToast('Ingresa un concepto', 'error'); return; }
+  if (!monto || monto <= 0) { showToast('Ingresa un monto válido', 'error'); return; }
+
+  const now = new Date();
+  const item = {
+    id: Date.now(),
+    fecha: now.toISOString(),
+    mes: getMesActual(),
+    concepto,
+    monto: Math.abs(monto),
+    cuenta,
+    notas
+  };
+
+  state.mercado.unshift(item);
+  saveState();
+  hideMercadoForm();
+  renderMercado();
+  showToast('✓ Item agregado', 'success');
+}
+
+function eliminarMercado(id) {
+  state.mercado = state.mercado.filter(m => m.id !== id);
+  saveState();
+  renderMercado();
+}
+
+function renderMercado() {
+  renderMesPills('mes-pills-mercado', state.mesMercado, (m) => {
+    state.mesMercado = m;
+    renderMercado();
+  });
+
+  const items = state.mercado.filter(m => m.mes === state.mesMercado);
+  const list = document.getElementById('mercado-list');
+  const total = items.reduce((s, m) => s + m.monto, 0);
+  document.getElementById('mercado-total').textContent = formatMoney(total);
+
+  if (!items.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🛒</div>Sin registros este mes</div>';
+    return;
+  }
+
+  list.innerHTML = items.map((m, i) => `
+    <div class="mercado-item">
+      <div class="mercado-num">${items.length - i}</div>
+      <div class="mercado-info">
+        <div class="mercado-name">${esc(m.concepto)}</div>
+        <div class="mercado-sub">${formatFechaShort(new Date(m.fecha))} · ${m.cuenta}${m.notas ? ' · ' + esc(m.notas) : ''}</div>
+      </div>
+      <div class="mercado-price">${formatMoney(m.monto)}</div>
+      <button class="mercado-del" onclick="eliminarMercado(${m.id})">✕</button>
+    </div>
+  `).join('');
+}
+
+// ─── HISTORIAL ───────────────────────────────────────
+function renderHistorial() {
+  renderMesPills('mes-pills-historial', state.mesHistorial, (m) => {
+    state.mesHistorial = m;
+    renderHistorial();
+  });
+
+  const txs = state.transacciones.filter(t => t.mes === state.mesHistorial);
+  const ingresos = txs.filter(t => t.movimiento === 'Ingreso').reduce((s, t) => s + t.total, 0);
+  const egresos = txs.filter(t => t.movimiento === 'Egreso').reduce((s, t) => s + t.total, 0);
+
+  document.getElementById('stat-ing').textContent = formatMoney(ingresos);
+  document.getElementById('stat-eg').textContent = formatMoney(egresos);
+
+  const list = document.getElementById('historial-list');
+  if (!txs.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div>Sin registros este mes</div>';
+    return;
+  }
+
+  const catIcons = {
+    Mercado:'🛒', Transporte:'🚗', Salidas:'🍕', Salud:'💊', Hogar:'🏠',
+    Entretenimiento:'🎬', Educacion:'📚', Vacaciones:'✈️', Regalos:'🎁',
+    Extras:'📦', Vehiculos:'🚙', Familia:'👨‍👩‍👧', Inversion:'📈', Ahorro:'💰',
+    Sueldo:'💵', Trabajo:'💼'
+  };
+
+  list.innerHTML = txs.map(t => {
+    const icon = catIcons[t.categoria] || '💳';
+    const isIngreso = t.movimiento === 'Ingreso';
+    return `
+      <div class="record">
+        <div class="record-icon" style="background: ${isIngreso ? 'rgba(52,211,153,0.15)' : 'rgba(248,113,113,0.1)'}">
+          ${icon}
+        </div>
+        <div class="record-info">
+          <div class="record-name">${esc(t.concepto)}</div>
+          <div class="record-meta">${t.categoria} · ${t.cuenta || 'Sin cuenta'} · ${formatFechaShort(new Date(t.fecha))}</div>
+        </div>
+        <div class="record-amount ${isIngreso ? 'ingreso' : 'egreso'}">
+          ${isIngreso ? '+' : '-'}${formatMoney(t.total)}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ─── MES PILLS ───────────────────────────────────────
+function renderMesPills(containerId, mesActivo, onSelect) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = MESES.map((m, i) => `
+    <div class="mes-pill ${m === mesActivo ? 'active' : ''}" onclick="(${onSelect.toString()})('${m}')">${MES_NAMES[i]}</div>
+  `).join('');
+}
+
+// ─── EXPORT ──────────────────────────────────────────
+function renderExportMes() {
+  renderMesPills('mes-pills-export', state.mesExport, (m) => {
+    state.mesExport = m;
+    renderExportMes();
+  });
+  const sid = localStorage.getItem('dani_sheet_id') || '';
+  document.getElementById('sheet-config-status').textContent = sid ? 'Configurado ✓' : 'No configurado';
+}
+
+function exportarCSV(tipo) {
+  let rows, headers, filename;
+
+  if (tipo === 'transacciones') {
+    const txs = state.transacciones.filter(t => t.mes === state.mesExport);
+    if (!txs.length) { showToast('Sin datos en este mes', 'error'); return; }
+    headers = 'Año,Mes,Fecha,Tipo,Movimiento,Categoría,Concepto,Total,Pago,Saldo,Cuenta';
+    rows = txs.map(t => {
+      const d = new Date(t.fecha);
+      const fecha = `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
+      return [2026, t.mes, fecha, t.tipo, t.movimiento, t.categoria, t.concepto, t.total, t.pago, (t.total - t.pago), t.cuenta].join(',');
+    });
+    filename = `transacciones_${state.mesExport}.csv`;
+  } else {
+    const items = state.mercado.filter(m => m.mes === state.mesExport);
+    if (!items.length) { showToast('Sin datos de mercado', 'error'); return; }
+    headers = 'Mes,Concepto / Tienda,Fecha,Monto ($),Cuenta,Notas';
+    rows = items.map(m => {
+      const d = new Date(m.fecha);
+      const fecha = `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
+      return [m.mes, m.concepto, fecha, m.monto, m.cuenta, m.notas || ''].join(',');
+    });
+    filename = `mercado_${state.mesExport}.csv`;
+  }
+
+  const csv = [headers, ...rows].join('\n');
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  showToast('✓ CSV descargado', 'success');
+}
+
+function copiarJSON() {
+  const data = {
+    transacciones: state.transacciones.filter(t => t.mes === state.mesExport),
+    mercado: state.mercado.filter(m => m.mes === state.mesExport)
+  };
+  navigator.clipboard.writeText(JSON.stringify(data, null, 2))
+    .then(() => showToast('✓ JSON copiado', 'success'))
+    .catch(() => showToast('Error al copiar', 'error'));
+}
+
+// ─── GOOGLE SHEETS ───────────────────────────────────
+function showSheetConfig() {
+  const panel = document.getElementById('sheet-config-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  const sid = localStorage.getItem('dani_sheet_id') || '';
+  const surl = localStorage.getItem('dani_script_url') || '';
+  document.getElementById('sheet-id-input').value = sid;
+  document.getElementById('script-url-input').value = surl;
+}
+
+function guardarSheetConfig() {
+  const sid = document.getElementById('sheet-id-input').value.trim();
+  const surl = document.getElementById('script-url-input').value.trim();
+  if (!sid) { showToast('Ingresa el Sheet ID', 'error'); return; }
+  localStorage.setItem('dani_sheet_id', sid);
+  localStorage.setItem('dani_script_url', surl);
+  document.getElementById('sheet-config-panel').style.display = 'none';
+  document.getElementById('sheet-config-status').textContent = 'Configurado ✓';
+  showToast('✓ Configuración guardada', 'success');
+}
+
+async function enviarASheets() {
+  const scriptUrl = localStorage.getItem('dani_script_url');
+  if (!scriptUrl) { showSheetConfig(); showToast('Primero configura el Sheet', 'error'); return; }
+
+  const txs = state.transacciones.filter(t => t.mes === state.mesExport);
+  const mkt = state.mercado.filter(m => m.mes === state.mesExport);
+
+  if (!txs.length && !mkt.length) { showToast('Sin datos en este mes', 'error'); return; }
+
+  showToast('Enviando...', '');
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      body: JSON.stringify({ transacciones: txs, mercado: mkt, mes: state.mesExport })
+    });
+    showToast('✓ Datos enviados a Sheets', 'success');
+  } catch(e) {
+    showToast('Error de conexión', 'error');
+  }
+}
+
+const APPS_SCRIPT = `function doPost(e) {
+  var data = JSON.parse(e.postData.contents);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // Transacciones
+  var sheetTx = ss.getSheetByName('Base_App') || ss.insertSheet('Base_App');
+  if (sheetTx.getLastRow() === 0) {
+    sheetTx.appendRow(['Año','Mes','Fecha','Tipo','Movimiento','Categoría','Concepto','Total','Pago','Saldo','Cuenta']);
+  }
+  (data.transacciones || []).forEach(function(t) {
+    var d = new Date(t.fecha);
+    sheetTx.appendRow([2026, t.mes, d, t.tipo, t.movimiento, t.categoria, t.concepto, t.total, t.pago, t.total-t.pago, t.cuenta]);
+  });
+  
+  // Mercado
+  var sheetMkt = ss.getSheetByName('Mercado_App') || ss.insertSheet('Mercado_App');
+  if (sheetMkt.getLastRow() === 0) {
+    sheetMkt.appendRow(['Mes','Concepto','Fecha','Monto','Cuenta','Notas']);
+  }
+  (data.mercado || []).forEach(function(m) {
+    var d = new Date(m.fecha);
+    sheetMkt.appendRow([m.mes, m.concepto, d, m.monto, m.cuenta, m.notas]);
+  });
+  
+  return ContentService.createTextOutput(JSON.stringify({status:'ok'})).setMimeType(ContentService.MimeType.JSON);
+}`;
+
+function copiarScript() {
+  navigator.clipboard.writeText(APPS_SCRIPT)
+    .then(() => showToast('✓ Script copiado', 'success'))
+    .catch(() => showToast('Error al copiar', 'error'));
+}
+
+// ─── UTILS ───────────────────────────────────────────
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+let toastTimer;
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ─── INIT ─────────────────────────────────────────────
+loadState();
+document.getElementById('fecha-hoy').textContent = formatFecha(new Date());
+</script>
+</body>
+</html>
