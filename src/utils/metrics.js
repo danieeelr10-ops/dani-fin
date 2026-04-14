@@ -19,8 +19,6 @@ export function computeMetrics(transacciones, mes) {
   txs.filter(t => t.movimiento === 'Ingreso').forEach(t => {
     byIngresoCat[t.categoria] = (byIngresoCat[t.categoria] || 0) + Math.abs(t.total);
   });
-  const egCash   = eg - tcEg;
-  const netoCash = ing - egCash;
   const hasData = ing > 0 || eg > 0;
-  return { ing, eg, neto: ing - eg, egCash, netoCash, fijos, vars, ahorroReal, invReal, tasaAhorro, nequiIng, nequiEg, tcEg, otrosEg, byCat, byIngresoCat, hasData };
+  return { ing, eg, neto: ing - eg, fijos, vars, ahorroReal, invReal, tasaAhorro, nequiIng, nequiEg, tcEg, otrosEg, byCat, byIngresoCat, hasData };
 }

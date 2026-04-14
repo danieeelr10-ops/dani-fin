@@ -80,7 +80,7 @@ function DashboardInner() {
 
   const today = mes === getMesActual() ? new Date().getDate() : new Date(2026, MESES.indexOf(mes) + 1, 0).getDate();
 
-  const netoDisplay = m.netoCash;
+  const netoDisplay = m.neto;
 
   // ── Chart: barras mensuales ───────────────────────────────
   const monthlyBar = useMemo(() => ({
@@ -147,11 +147,11 @@ function DashboardInner() {
           </Box>
         </Box>
 
-        {/* Ingresos / Egresos / TC pills */}
+        {/* Ingresos / Egresos pills */}
         <Box sx={{ display: 'flex', gap: 1.5, mb: 2.5 }}>
           {[
-            { label: '↑ Ingresos',   value: m.ing,    color: '#00A76F', bg: alpha('#00A76F', 0.1) },
-            { label: '↓ Cash gasto', value: m.egCash, color: '#FF5630', bg: alpha('#FF5630', 0.08) },
+            { label: '↑ Ingresos', value: m.ing, color: '#00A76F', bg: alpha('#00A76F', 0.1) },
+            { label: '↓ Egresos',  value: m.eg,  color: '#FF5630', bg: alpha('#FF5630', 0.08) },
           ].map(s => (
             <Box key={s.label} sx={{ flex: 1, px: 2, py: 1.25, borderRadius: 2, bgcolor: s.bg, border: '1px solid', borderColor: alpha(s.color, 0.2) }}>
               <Typography sx={{ fontSize: 11, fontWeight: 700, color: s.color, mb: 0.25 }}>{s.label}</Typography>
@@ -159,19 +159,6 @@ function DashboardInner() {
             </Box>
           ))}
         </Box>
-        {/* TC debt indicator */}
-        {m.tcEg > 0 && (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1.25, mb: 2.5, borderRadius: 2, bgcolor: alpha('#9C27B0', 0.08), border: '1px solid', borderColor: alpha('#9C27B0', 0.2) }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography sx={{ fontSize: 16 }}>💳</Typography>
-              <Box>
-                <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#CE93D8', mb: 0 }}>Deuda T.C (pendiente de pago)</Typography>
-                <Typography sx={{ fontSize: 10, color: 'text.disabled' }}>No afecta tu cash hasta que la pagues</Typography>
-              </Box>
-            </Box>
-            <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#CE93D8' }}>{formatMoneyShort(m.tcEg)}</Typography>
-          </Box>
-        )}
 
         {/* KPIs secundarios */}
         <Box sx={{ display: 'flex', gap: 1, mb: 2.5 }}>
@@ -249,7 +236,7 @@ function DashboardInner() {
     const legends = [
       { name: 'Ingresos', color: '#00A76F', val: formatMoneyShort(m.ing) },
       { name: 'Egresos',  color: '#FFAB00', val: formatMoneyShort(m.eg)  },
-      { name: 'Ahorro',   color: '#00B8D9', val: formatMoneyShort(Math.max(0, m.netoCash)) },
+      { name: 'Ahorro',   color: '#00B8D9', val: formatMoneyShort(Math.max(0, m.neto)) },
     ];
 
     return (
@@ -281,7 +268,7 @@ function DashboardInner() {
 
         <ReactApexChart
           type="bar" height={280}
-          series={[{ name: 'Ingresos', data: d.ing }, { name: 'Egresos', data: d.eg }, { name: 'Ahorro', data: allMetrics.map(mt => Math.max(0, mt.netoCash)) }]}
+          series={[{ name: 'Ingresos', data: d.ing }, { name: 'Egresos', data: d.eg }, { name: 'Ahorro', data: d.ing.map((v, i) => Math.max(0, v - d.eg[i])) }]}
           options={barOpts}
         />
       </Card>
@@ -422,10 +409,10 @@ function DashboardInner() {
                 {met.hasData ? (
                   <>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                      <Typography variant="caption" color="text.secondary">{formatMoneyShort(met.egCash)} / {formatMoneyShort(met.ing)}</Typography>
-                      <Typography variant="caption" sx={{ color: met.netoCash >= 0 ? 'success.main' : 'error.main' }}>{formatMoneyShort(met.netoCash)}</Typography>
+                      <Typography variant="caption" color="text.secondary">{formatMoneyShort(met.eg)} / {formatMoneyShort(met.ing)}</Typography>
+                      <Typography variant="caption" sx={{ color: met.neto >= 0 ? 'success.main' : 'error.main' }}>{formatMoneyShort(met.neto)}</Typography>
                     </Box>
-                    <LinearProgress variant="determinate" value={Math.min((met.egCash / (met.ing || 1)) * 100, 100)}
+                    <LinearProgress variant="determinate" value={Math.min((met.eg / (met.ing || 1)) * 100, 100)}
                       sx={{ height: 4, bgcolor: alpha('#919EAB', 0.16), '& .MuiLinearProgress-bar': { bgcolor: ok ? 'success.main' : warn ? 'warning.main' : 'error.main' } }} />
                   </>
                 ) : (
