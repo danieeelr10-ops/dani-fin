@@ -275,6 +275,24 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
     return items.filter(i => state.categoriasIngreso.includes(i.categoria));
   }, [state.presupuestosDetalle, mes, state.categoriasIngreso]);
 
+  // Items de egreso del presupuesto detallado, agrupados por categoría
+  const egresoDetallePorCat = useMemo(() => {
+    const map = {};
+    const items = state.presupuestosDetalle?.[mes] || [];
+    items.filter(i => !state.categoriasIngreso.includes(i.categoria)).forEach(i => {
+      if (!map[i.categoria]) map[i.categoria] = [];
+      map[i.categoria].push(i);
+    });
+    return map;
+  }, [state.presupuestosDetalle, mes, state.categoriasIngreso]);
+
+  // Mapa de transacciones por id (para lookup de pagadoCon)
+  const txById = useMemo(() => {
+    const map = {};
+    (state.transacciones || []).forEach(t => { map[t.id] = t; });
+    return map;
+  }, [state.transacciones]);
+
   // Ingresos recibidos este mes por concepto
   const ingresosRecibidos = useMemo(() => {
     const map = {};
@@ -367,12 +385,30 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
       {hayFijos && (
         <Box sx={{ mb: 2.5 }}>
           <SectionLabel>Egresos fijos</SectionLabel>
-          {fijos.map(cat => (
-            <PresupuestoItem key={cat}
-              cat={cat} presupuesto={presupMes[cat] || 0} pagado={pagadoPorCat[cat] || 0}
-              esIngreso={false} state={state} onPagar={handlePagar}
-            />
-          ))}
+          {fijos.map(cat => {
+            const items = egresoDetallePorCat[cat];
+            if (items?.length > 0) {
+              return items.map(item => (
+                <PresupuestoItem key={item.id}
+                  cat={item.concepto || item.categoria}
+                  categoriaReal={item.categoria}
+                  presupuesto={item.monto}
+                  pagado={item.pagadoCon ? Math.abs((txById[item.txId] || {}).total || item.monto) : 0}
+                  esIngreso={false} state={state}
+                  onPagar={({ monto, cuenta, tarjeta }) => {
+                    pagarPresupuestoItem(mes, item.id, cuenta, tarjeta, monto);
+                    showToast(`${item.concepto || item.categoria} pagado`, 'success');
+                  }}
+                />
+              ));
+            }
+            return (
+              <PresupuestoItem key={cat}
+                cat={cat} presupuesto={presupMes[cat] || 0} pagado={pagadoPorCat[cat] || 0}
+                esIngreso={false} state={state} onPagar={handlePagar}
+              />
+            );
+          })}
         </Box>
       )}
 
@@ -380,12 +416,30 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
       {hayVars && (
         <Box sx={{ mb: 2.5 }}>
           <SectionLabel>Egresos variables</SectionLabel>
-          {vars.map(cat => (
-            <PresupuestoItem key={cat}
-              cat={cat} presupuesto={presupMes[cat] || 0} pagado={pagadoPorCat[cat] || 0}
-              esIngreso={false} state={state} onPagar={handlePagar}
-            />
-          ))}
+          {vars.map(cat => {
+            const items = egresoDetallePorCat[cat];
+            if (items?.length > 0) {
+              return items.map(item => (
+                <PresupuestoItem key={item.id}
+                  cat={item.concepto || item.categoria}
+                  categoriaReal={item.categoria}
+                  presupuesto={item.monto}
+                  pagado={item.pagadoCon ? Math.abs((txById[item.txId] || {}).total || item.monto) : 0}
+                  esIngreso={false} state={state}
+                  onPagar={({ monto, cuenta, tarjeta }) => {
+                    pagarPresupuestoItem(mes, item.id, cuenta, tarjeta, monto);
+                    showToast(`${item.concepto || item.categoria} pagado`, 'success');
+                  }}
+                />
+              ));
+            }
+            return (
+              <PresupuestoItem key={cat}
+                cat={cat} presupuesto={presupMes[cat] || 0} pagado={pagadoPorCat[cat] || 0}
+                esIngreso={false} state={state} onPagar={handlePagar}
+              />
+            );
+          })}
         </Box>
       )}
 
