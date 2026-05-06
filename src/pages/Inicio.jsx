@@ -77,7 +77,7 @@ export default function Inicio() {
   // Métricas
   const metrics  = useMemo(() => computeMetrics(state.transacciones || [], mes), [state.transacciones, mes])
   const presupMes = state.presupuestos?.[mes] || {}
-  const balance   = metrics.ing - metrics.eg
+  const balance   = metrics.neto  // cash balance: ing - egCash (TC excluded)
   const positivo  = balance >= 0
   const balColor  = positivo ? GREEN : RED
 
@@ -121,9 +121,8 @@ export default function Inicio() {
   }, [state.presupuestosDetalle, state.transacciones, presupMes, mes, state.categoriasIngreso])
 
   const ingPresDetalle = ingPres
-  const margen     = ingPres - metrics.eg
-  const margenPlan = ingPres - egPresPlan
-  const pctGastado = ingPres > 0 ? Math.min(metrics.eg / ingPres, 1) : 0
+  const margenPlan = ingPres - egPresPlan  // plan puro: ingresos presupuestados - egresos presupuestados
+  const pctGastado = egPresPlan > 0 ? Math.min(metrics.eg / egPresPlan, 1) : 0
   const hayPresup  = ingPres > 0 || egPresPlan > 0
 
   // Hábitos
@@ -215,7 +214,7 @@ export default function Inicio() {
           </Typography>
           {metrics.hasData && (
             <Typography sx={{ fontSize: 13, color: T2, mt: 0.5, mb: 1.5 }}>
-              Ingresos {formatMoneyShort(metrics.ing)} · Gastos {formatMoneyShort(metrics.eg)}
+              Ingresos {formatMoneyShort(metrics.ing)} · Gastos cash {formatMoneyShort(metrics.egCash)}{metrics.tcEg > 0 ? ` · TC pendiente ${formatMoneyShort(metrics.tcEg)}` : ''}
             </Typography>
           )}
           <Box onClick={() => setDesglose(d => !d)} sx={{ display: 'inline-flex', cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
@@ -241,23 +240,42 @@ export default function Inicio() {
                   </Box>
                 </Box>
               ))}
+              {metrics.tcEg > 0 && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <Typography sx={{ fontSize: 13, color: T2 }}>TC (pendiente de pago)</Typography>
+                  <Typography sx={{ fontSize: 14, fontWeight: 600, color: T2 }}>−{formatMoneyShort(metrics.tcEg)}</Typography>
+                </Box>
+              )}
             </Box>
           </Box>
         </Box>
 
         {/* ── Margen del presupuesto ── */}
+        {!hayPresup && (
+          <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 3 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1 }}>
+              Margen presupuestado · {mesNombre}
+            </Typography>
+            <Typography sx={{ fontSize: 14, color: T2, mb: 1.5 }}>
+              Sin presupuesto configurado para este mes
+            </Typography>
+            <Box onClick={() => navigate('/presupuesto')} sx={{ display: 'inline-block', cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
+              <Typography sx={{ fontSize: 13, fontWeight: 500, color: GREEN }}>Ir a Presupuesto →</Typography>
+            </Box>
+          </Box>
+        )}
         {hayPresup && (
           <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
               <Box>
                 <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
-                  Margen presupuesto
+                  Margen presupuestado · {mesNombre}
                 </Typography>
-                <Typography sx={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1, color: margen >= 0 ? (margen < margenPlan * 0.25 ? '#F59E0B' : GREEN) : RED }}>
-                  {margen < 0 ? '−' : ''}{formatMoney(Math.abs(margen))}
+                <Typography sx={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1, color: margenPlan >= 0 ? GREEN : RED }}>
+                  {margenPlan < 0 ? '−' : ''}{formatMoney(Math.abs(margenPlan))}
                 </Typography>
                 <Typography sx={{ fontSize: 12, color: T2, mt: 0.4 }}>
-                  de {formatMoneyShort(ingPres)} presupuestados
+                  de {formatMoneyShort(ingPres)} ingresos planeados
                 </Typography>
               </Box>
               <Box sx={{ textAlign: 'right' }}>
@@ -270,9 +288,9 @@ export default function Inicio() {
             {/* Barra gastos */}
             <Box sx={{ mb: 1.25 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2 }}>Gastos</Typography>
+                <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2 }}>Ejecutado vs plan</Typography>
                 <Typography sx={{ fontSize: 11, color: pctGastado > 0.9 ? RED : pctGastado > 0.7 ? '#F59E0B' : T2 }}>
-                  {Math.round(pctGastado * 100)}% del ingreso usado
+                  Gastado {formatMoneyShort(metrics.eg)} de {formatMoneyShort(egPresPlan)}
                 </Typography>
               </Box>
               <Box sx={{ height: 7, borderRadius: 4, bgcolor: '#F3F4F6', overflow: 'hidden' }}>
@@ -291,9 +309,9 @@ export default function Inicio() {
               return (
                 <Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2 }}>Ingresos recibidos</Typography>
+                    <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2 }}>Ingresos recibidos vs esperados</Typography>
                     <Typography sx={{ fontSize: 11, color: pctIng >= 1 ? GREEN : T2 }}>
-                      {Math.round(pctIng * 100)}%{falta > 0 ? ` · falta ${formatMoneyShort(falta)}` : ' · completo'}
+                      Recibido {formatMoneyShort(ingRecibidoPresup)} de {formatMoneyShort(ingPresDetalle)} esperado
                     </Typography>
                   </Box>
                   <Box sx={{ height: 7, borderRadius: 4, bgcolor: '#F3F4F6', overflow: 'hidden' }}>
