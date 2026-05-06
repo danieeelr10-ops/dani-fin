@@ -98,7 +98,7 @@ function CuentaSelector({ state, cuenta, setCuenta, tarjeta, setTarjeta }) {
 function PresupuestoItem({ cat, categoriaReal, presupuesto, pagado, esIngreso, onOpen }) {
   const pct        = presupuesto > 0 ? Math.min((pagado / presupuesto) * 100, 100) : 0;
   const pagadoTotal = pagado >= presupuesto && presupuesto > 0;
-  const icon       = CAT_ICONS[cat] || (esIngreso ? '💼' : '·');
+  const icon       = CAT_ICONS[categoriaReal || cat] || (esIngreso ? '💼' : '🔹');
 
   return (
     <Box
@@ -180,14 +180,13 @@ function PaySheet({ sel, state, onClose, onConfirm }) {
   return (
     <>
       {/* Backdrop */}
-      <Box onClick={onClose} sx={{ position: 'fixed', inset: 0, bgcolor: 'rgba(0,0,0,0.45)', zIndex: 200 }} />
+      <Box onClick={onClose} sx={{ position: 'fixed', inset: 0, bgcolor: 'rgba(0,0,0,0.45)', zIndex: 1300 }} />
       {/* Sheet */}
       <Box sx={{
-        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201,
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1301,
         bgcolor: CARD, borderRadius: '20px 20px 0 0',
         p: 2.5, pb: 4,
         boxShadow: '0 -4px 24px rgba(0,0,0,0.12)',
-        maxWidth: 500, mx: 'auto',
       }}>
         {/* Handle */}
         <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: '#E5E7EB', mx: 'auto', mb: 2 }} />
