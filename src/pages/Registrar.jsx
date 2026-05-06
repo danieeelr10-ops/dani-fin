@@ -94,27 +94,17 @@ function CuentaSelector({ state, cuenta, setCuenta, tarjeta, setTarjeta }) {
   );
 }
 
-// ── Item de presupuesto (solo fila + barra, sin form inline) ──
-function PresupuestoItem({ cat, categoriaReal, presupuesto, pagado, esIngreso, onOpen }) {
-  const pct        = presupuesto > 0 ? Math.min((pagado / presupuesto) * 100, 100) : 0;
+// ── Fila simple (categoría sin detalle) ───────────────────
+function SimpleRow({ cat, presupuesto, pagado, esIngreso, onOpen }) {
+  const pct         = presupuesto > 0 ? Math.min((pagado / presupuesto) * 100, 100) : 0;
   const pagadoTotal = pagado >= presupuesto && presupuesto > 0;
-  const icon       = CAT_ICONS[categoriaReal || cat] || (esIngreso ? '💼' : '🔹');
-
+  const icon        = CAT_ICONS[cat] || (esIngreso ? '💼' : '🔹');
   return (
-    <Box
-      onClick={() => !pagadoTotal && onOpen()}
-      sx={{ borderRadius: '12px', bgcolor: CARD, boxShadow: CARD_SH, border: `1px solid ${BORDER}`, overflow: 'hidden', mb: 0.875, cursor: pagadoTotal ? 'default' : 'pointer', '&:active': { opacity: pagadoTotal ? 1 : 0.7 } }}
-    >
+    <Box onClick={() => !pagadoTotal && onOpen()}
+      sx={{ borderRadius: '12px', bgcolor: CARD, boxShadow: CARD_SH, border: `1px solid ${BORDER}`, overflow: 'hidden', mb: 0.875, cursor: pagadoTotal ? 'default' : 'pointer', '&:active': { opacity: pagadoTotal ? 1 : 0.75 } }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.75, py: 1.375 }}>
-        <Box sx={{
-          width: 36, height: 36, borderRadius: '9px', flexShrink: 0,
-          bgcolor: pagadoTotal ? alpha(GREEN, 0.1) : '#F3F4F6',
-          border: `1px solid ${pagadoTotal ? alpha(GREEN, 0.2) : BORDER}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
-        }}>
-          {pagadoTotal
-            ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-            : icon}
+        <Box sx={{ width: 36, height: 36, borderRadius: '9px', flexShrink: 0, bgcolor: pagadoTotal ? alpha(GREEN, 0.1) : '#F3F4F6', border: `1px solid ${pagadoTotal ? alpha(GREEN, 0.2) : BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+          {pagadoTotal ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg> : icon}
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ fontSize: 14, fontWeight: 600, color: T1, lineHeight: 1.2 }}>{cat}</Typography>
@@ -125,23 +115,82 @@ function PresupuestoItem({ cat, categoriaReal, presupuesto, pagado, esIngreso, o
             </Box>
           )}
         </Box>
-        {pagadoTotal ? (
-          <Typography sx={{ fontSize: 11, fontWeight: 700, color: GREEN, bgcolor: alpha(GREEN, 0.08), px: 0.875, py: 0.3, borderRadius: '6px' }}>
-            {esIngreso ? 'Recibido' : 'Pagado'}
-          </Typography>
-        ) : (
-          <Box sx={{ px: 1, py: 0.5, borderRadius: '8px', bgcolor: '#F3F4F6', border: `1px solid ${BORDER}` }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 700, color: T2 }}>
-              {esIngreso ? 'Recibir' : 'Pagar'}
-            </Typography>
-          </Box>
-        )}
+        {pagadoTotal
+          ? <Typography sx={{ fontSize: 11, fontWeight: 700, color: GREEN, bgcolor: alpha(GREEN, 0.08), px: 0.875, py: 0.3, borderRadius: '6px' }}>{esIngreso ? 'Recibido' : 'Pagado'}</Typography>
+          : <Box sx={{ px: 1, py: 0.5, borderRadius: '8px', bgcolor: '#F3F4F6', border: `1px solid ${BORDER}` }}><Typography sx={{ fontSize: 11, fontWeight: 700, color: T2 }}>{esIngreso ? 'Recibir' : 'Pagar'}</Typography></Box>
+        }
       </Box>
       {presupuesto > 0 && (
         <Box sx={{ mx: 1.75, mb: 0.875, height: 3, borderRadius: 2, bgcolor: '#F3F4F6', overflow: 'hidden' }}>
           <Box sx={{ height: '100%', width: `${pct}%`, bgcolor: pagadoTotal ? GREEN : T1, borderRadius: 2, transition: 'width 0.4s' }} />
         </Box>
       )}
+    </Box>
+  );
+}
+
+// ── Acordeón por categoría (con sub-items de detalle) ─────
+function CategoryAccordion({ cat, items, txById, esIngreso, onOpenItem }) {
+  const [open, setOpen] = useState(false);
+  const icon        = CAT_ICONS[cat] || (esIngreso ? '💼' : '🔹');
+  const totalPres   = items.reduce((s, i) => s + i.monto, 0);
+  const totalPagado = items.reduce((s, i) => {
+    if (!i.pagadoCon) return s;
+    const tx = txById[i.txId];
+    return s + (tx ? Math.abs(tx.total) : i.monto);
+  }, 0);
+  const pct         = totalPres > 0 ? Math.min((totalPagado / totalPres) * 100, 100) : 0;
+  const todosPagados = items.every(i => i.pagadoCon);
+
+  return (
+    <Box sx={{ borderRadius: '12px', bgcolor: CARD, boxShadow: CARD_SH, border: `1px solid ${open ? T1 : BORDER}`, overflow: 'hidden', mb: 0.875, transition: 'border-color 0.15s' }}>
+      {/* Cabecera */}
+      <Box onClick={() => setOpen(o => !o)} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.75, py: 1.375, cursor: 'pointer', '&:active': { opacity: 0.75 } }}>
+        <Box sx={{ width: 36, height: 36, borderRadius: '9px', flexShrink: 0, bgcolor: todosPagados ? alpha(GREEN, 0.1) : open ? alpha(T1, 0.06) : '#F3F4F6', border: `1px solid ${todosPagados ? alpha(GREEN, 0.2) : BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+          {todosPagados ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg> : icon}
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ fontSize: 14, fontWeight: 700, color: T1, lineHeight: 1.2 }}>{cat}</Typography>
+          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', mt: 0.3 }}>
+            <Typography sx={{ fontSize: 11, color: todosPagados ? GREEN : T2 }}>{fmtCOP(totalPagado)}</Typography>
+            <Typography sx={{ fontSize: 11, color: T2 }}>/ {fmtCOP(totalPres)} · {items.length} items</Typography>
+          </Box>
+        </Box>
+        {/* Chevron */}
+        <Box sx={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T2} strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </Box>
+      </Box>
+      {/* Barra de progreso */}
+      {totalPres > 0 && (
+        <Box sx={{ mx: 1.75, mb: open ? 0 : 0.875, height: 3, borderRadius: 2, bgcolor: '#F3F4F6', overflow: 'hidden' }}>
+          <Box sx={{ height: '100%', width: `${pct}%`, bgcolor: todosPagados ? GREEN : T1, borderRadius: 2, transition: 'width 0.4s' }} />
+        </Box>
+      )}
+      {/* Sub-items */}
+      <Box sx={{ maxHeight: open ? `${items.length * 64}px` : 0, overflow: 'hidden', transition: 'max-height 0.25s ease' }}>
+        <Box sx={{ mx: 1.25, mb: 1.25, mt: 1, display: 'flex', flexDirection: 'column', gap: 0.625 }}>
+          {items.map(item => {
+            const pagadoItem  = item.pagadoCon ? Math.abs((txById[item.txId] || {}).total || item.monto) : 0;
+            const itemPagado  = !!item.pagadoCon;
+            return (
+              <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.875, borderRadius: '10px', bgcolor: itemPagado ? alpha(GREEN, 0.05) : '#F9FAFB', border: `1px solid ${itemPagado ? alpha(GREEN, 0.15) : BORDER}` }}>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600, color: T1, lineHeight: 1.2 }}>{item.concepto}</Typography>
+                  <Typography sx={{ fontSize: 11, color: itemPagado ? GREEN : T2 }}>{fmtCOP(item.monto)}</Typography>
+                </Box>
+                {itemPagado
+                  ? <Typography sx={{ fontSize: 11, fontWeight: 700, color: GREEN, bgcolor: alpha(GREEN, 0.1), px: 0.75, py: 0.25, borderRadius: '6px' }}>✓ Pagado</Typography>
+                  : <Box component="button" onClick={e => { e.stopPropagation(); onOpenItem(item, pagadoItem); }}
+                      sx={{ px: 1.25, py: 0.5, borderRadius: '8px', border: `1px solid ${T1}`, bgcolor: T1, color: '#fff', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>
+                      Pagar
+                    </Box>
+                }
+              </Box>
+            );
+          })}
+        </Box>
+      </Box>
     </Box>
   );
 }
@@ -402,9 +451,8 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
         <SectionLabel>Ingresos</SectionLabel>
         {ingresosDetalle.length > 0 ? (
           ingresosDetalle.map(item => (
-            <PresupuestoItem key={item.id}
+            <SimpleRow key={item.id}
               cat={item.concepto || item.categoria}
-              categoriaReal={item.categoria}
               presupuesto={item.monto}
               pagado={ingresosRecibidos[item.concepto || item.categoria] || 0}
               esIngreso={true}
@@ -413,7 +461,7 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
           ))
         ) : (
           state.categoriasIngreso.map(cat => (
-            <PresupuestoItem key={cat}
+            <SimpleRow key={cat}
               cat={cat} presupuesto={presupMes[cat] || 0}
               pagado={ingresosRecibidos[cat] || 0}
               esIngreso={true}
@@ -433,22 +481,15 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
           {fijos.map(cat => {
             const items = egresoDetallePorCat[cat];
             if (items?.length > 0) {
-              return items.map(item => {
-                const pagadoItem = item.pagadoCon ? Math.abs((txById[item.txId] || {}).total || item.monto) : 0;
-                return (
-                  <PresupuestoItem key={item.id}
-                    cat={item.concepto || item.categoria}
-                    categoriaReal={item.categoria}
-                    presupuesto={item.monto}
-                    pagado={pagadoItem}
-                    esIngreso={false}
-                    onOpen={() => openPay({ cat: item.concepto || item.categoria, categoriaReal: item.categoria, presupuesto: item.monto, pagado: pagadoItem, esIngreso: false, itemId: item.id, conceptoFijo: item.concepto })}
-                  />
-                );
-              });
+              return (
+                <CategoryAccordion key={cat}
+                  cat={cat} items={items} txById={txById} esIngreso={false}
+                  onOpenItem={(item, pagadoItem) => openPay({ cat: item.concepto, categoriaReal: cat, presupuesto: item.monto, pagado: pagadoItem, esIngreso: false, itemId: item.id, conceptoFijo: item.concepto })}
+                />
+              );
             }
             return (
-              <PresupuestoItem key={cat}
+              <SimpleRow key={cat}
                 cat={cat} presupuesto={presupMes[cat] || 0} pagado={pagadoPorCat[cat] || 0}
                 esIngreso={false}
                 onOpen={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: pagadoPorCat[cat] || 0, esIngreso: false })}
@@ -465,22 +506,15 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
           {vars.map(cat => {
             const items = egresoDetallePorCat[cat];
             if (items?.length > 0) {
-              return items.map(item => {
-                const pagadoItem = item.pagadoCon ? Math.abs((txById[item.txId] || {}).total || item.monto) : 0;
-                return (
-                  <PresupuestoItem key={item.id}
-                    cat={item.concepto || item.categoria}
-                    categoriaReal={item.categoria}
-                    presupuesto={item.monto}
-                    pagado={pagadoItem}
-                    esIngreso={false}
-                    onOpen={() => openPay({ cat: item.concepto || item.categoria, categoriaReal: item.categoria, presupuesto: item.monto, pagado: pagadoItem, esIngreso: false, itemId: item.id, conceptoFijo: item.concepto })}
-                  />
-                );
-              });
+              return (
+                <CategoryAccordion key={cat}
+                  cat={cat} items={items} txById={txById} esIngreso={false}
+                  onOpenItem={(item, pagadoItem) => openPay({ cat: item.concepto, categoriaReal: cat, presupuesto: item.monto, pagado: pagadoItem, esIngreso: false, itemId: item.id, conceptoFijo: item.concepto })}
+                />
+              );
             }
             return (
-              <PresupuestoItem key={cat}
+              <SimpleRow key={cat}
                 cat={cat} presupuesto={presupMes[cat] || 0} pagado={pagadoPorCat[cat] || 0}
                 esIngreso={false}
                 onOpen={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: pagadoPorCat[cat] || 0, esIngreso: false })}
