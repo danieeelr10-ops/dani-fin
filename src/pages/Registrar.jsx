@@ -98,6 +98,7 @@ function CuentaSelector({ state, cuenta, setCuenta, tarjeta, setTarjeta }) {
 function PresupuestoItem({ cat, categoriaReal, presupuesto, pagado, esIngreso, state, onPagar }) {
   const [open, setOpen] = useState(false);
   const [monto, setMonto] = useState('');
+  const [concepto, setConcepto] = useState('');
   const [cuenta, setCuenta] = useState('');
   const [tarjeta, setTarjeta] = useState('');
   const [fecha, setFecha] = useState(todayStr());
@@ -115,9 +116,10 @@ function PresupuestoItem({ cat, categoriaReal, presupuesto, pagado, esIngreso, s
   function handleConfirm() {
     const val = parseAmt(monto);
     if (!val) return;
-    onPagar({ cat: categoriaReal || cat, concepto: cat, monto: val, cuenta, tarjeta, fecha, esIngreso });
+    onPagar({ cat: categoriaReal || cat, concepto: concepto.trim() || cat, monto: val, cuenta, tarjeta, fecha, esIngreso });
     setOpen(false);
     setMonto('');
+    setConcepto('');
     setCuenta('');
     setTarjeta('');
   }
@@ -179,8 +181,16 @@ function PresupuestoItem({ cat, categoriaReal, presupuesto, pagado, esIngreso, s
       )}
 
       {/* Formulario de pago inline */}
-      <Box sx={{ overflow: 'hidden', maxHeight: open ? 400 : 0, transition: 'max-height 0.3s ease' }}>
+      <Box sx={{ overflow: 'hidden', maxHeight: open ? 500 : 0, transition: 'max-height 0.3s ease' }}>
         <Box sx={{ px: 1.75, pb: 1.5, pt: 0.5, borderTop: `1px solid ${BORDER}`, bgcolor: '#FAFAFA' }}>
+          {/* Concepto (solo para egresos sin item específico) */}
+          {!esIngreso && (
+            <Box component="input" type="text" placeholder={`¿Qué estás pagando? (ej: Arriendo)`}
+              value={concepto}
+              onChange={e => setConcepto(e.target.value)}
+              sx={{ width: '100%', boxSizing: 'border-box', px: 1.25, py: 0.875, borderRadius: '10px', border: `1px solid ${BORDER}`, bgcolor: CARD, fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', mb: 1, '&::placeholder': { color: alpha('#919EAB', 0.45) }, '&:focus': { borderColor: T1 } }}
+            />
+          )}
           {/* Monto */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.25, py: 0.875, borderRadius: '10px', border: `1px solid ${BORDER}`, bgcolor: CARD, mb: 1 }}>
             <Typography sx={{ fontSize: 18, fontWeight: 700, color: T2, lineHeight: 1, flexShrink: 0 }}>$</Typography>
