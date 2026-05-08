@@ -125,21 +125,18 @@ export default function Inicio() {
   const pctGastado = egPresPlan > 0 ? Math.min(metrics.eg / egPresPlan, 1) : 0
   const hayPresup  = ingPres > 0 || egPresPlan > 0
 
-  // Saldo por cuenta (acumulado desde todos los meses + saldo inicial)
+  // Flujo por cuenta en el mes activo
   const saldosCuenta = useMemo(() => {
-    const txs = state.transacciones || []
-    const cuentas = state.cuentas?.length ? state.cuentas : ['Efectivo', 'Nequi']
-    const saldosIni = state.saldosIniciales || {}
+    const txsMes = (state.transacciones || []).filter(t => t.mes === mes)
+    const cuentas = (state.cuentas || []).filter(c => c !== 'T.C')
     return cuentas
-      .filter(c => c !== 'T.C')
       .map(c => {
-        const ing = txs.filter(t => t.movimiento === 'Ingreso' && t.cuenta === c).reduce((s, t) => s + Math.abs(t.total), 0)
-        const eg  = txs.filter(t => t.movimiento === 'Egreso'  && t.cuenta === c).reduce((s, t) => s + Math.abs(t.total), 0)
-        const ini = saldosIni[c] || 0
-        return { cuenta: c, ini, ing, eg, saldo: ini + ing - eg }
+        const ing = txsMes.filter(t => t.movimiento === 'Ingreso' && t.cuenta === c).reduce((s, t) => s + Math.abs(t.total), 0)
+        const eg  = txsMes.filter(t => t.movimiento === 'Egreso'  && t.cuenta === c).reduce((s, t) => s + Math.abs(t.total), 0)
+        return { cuenta: c, ing, eg, neto: ing - eg }
       })
-      .filter(c => c.ini > 0 || c.ing > 0 || c.eg > 0)
-  }, [state.transacciones, state.cuentas, state.saldosIniciales])
+      .filter(c => c.ing > 0 || c.eg > 0)
+  }, [state.transacciones, state.cuentas, mes])
 
   // Hábitos
   const habitosData = useMemo(() => {
@@ -266,29 +263,27 @@ export default function Inicio() {
           </Box>
         </Box>
 
-        {/* ── Saldo por cuenta ── */}
+        {/* ── Flujo por cuenta ── */}
         {saldosCuenta.length > 0 && (
           <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 3 }}>
             <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.5 }}>
-              Saldo estimado por cuenta
+              Flujo por cuenta · {mesNombre}
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {saldosCuenta.map(({ cuenta, ini, ing, eg, saldo }, i) => (
+              {saldosCuenta.map(({ cuenta, ing, eg, neto }, i) => (
                 <Box key={cuenta} sx={{
                   display: 'grid', gridTemplateColumns: '1fr auto',
-                  alignItems: 'center', gap: 1,
-                  py: 1.25,
+                  alignItems: 'center', gap: 1, py: 1.25,
                   borderBottom: i < saldosCuenta.length - 1 ? `1px solid #F0F0F0` : 'none',
                 }}>
                   <Box>
                     <Typography sx={{ fontSize: 13, fontWeight: 600, color: T1 }}>{cuenta}</Typography>
                     <Typography sx={{ fontSize: 11, color: T2, mt: 0.2 }}>
-                      {ini > 0 ? `Inicio ${formatMoneyShort(ini)} · ` : ''}
-                      +{formatMoneyShort(ing)} − {formatMoneyShort(eg)}
+                      +{formatMoneyShort(ing)} entradas · −{formatMoneyShort(eg)} salidas
                     </Typography>
                   </Box>
-                  <Typography sx={{ fontSize: 15, fontWeight: 700, color: saldo >= 0 ? GREEN : RED }}>
-                    {formatMoney(saldo)}
+                  <Typography sx={{ fontSize: 15, fontWeight: 700, color: neto >= 0 ? GREEN : RED }}>
+                    {neto >= 0 ? '+' : '−'}{formatMoney(Math.abs(neto))}
                   </Typography>
                 </Box>
               ))}
