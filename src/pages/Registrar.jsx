@@ -355,10 +355,10 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
   const presupMes = state.presupuestos?.[mes] || {};
   const txsMes = useMemo(() => state.transacciones.filter(t => t.mes === mes), [state.transacciones, mes]);
 
-  // Calcular lo ya pagado por categoría
+  // Calcular lo ya pagado por categoría (solo Egresos)
   const pagadoPorCat = useMemo(() => {
     const map = {};
-    txsMes.forEach(t => {
+    txsMes.filter(t => t.movimiento === 'Egreso').forEach(t => {
       if (!map[t.categoria]) map[t.categoria] = 0;
       map[t.categoria] += Math.abs(t.total);
     });
