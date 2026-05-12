@@ -429,18 +429,33 @@ export function FinanzasProvider({ children }) {
 
   const addTransaccion    = (tx)   => update(prev => ({ ...prev, transacciones: [tx, ...prev.transacciones] }));
   const deleteTransaccion = (id) => update(prev => {
-    // Limpiar el item de presupuestosDetalle que tenga este txId
+    const txsFiltradas = prev.transacciones.filter(t => t.id !== id);
     const newDetalle = {};
     Object.entries(prev.presupuestosDetalle || {}).forEach(([mes, items]) => {
-      newDetalle[mes] = (items || []).map(item =>
-        String(item.txId) === String(id)
-          ? { ...item, pagadoCon: null, tarjetaPago: null, txId: null }
-          : item
-      );
+      newDetalle[mes] = (items || []).map(item => {
+        const nuevosPagos = (item.pagos || []).filter(p => String(p.txId) !== String(id));
+        const eraEnPagos  = nuevosPagos.length !== (item.pagos || []).length;
+        const eraLegacy   = !item.pagos?.length && String(item.txId) === String(id);
+        if (!eraEnPagos && !eraLegacy) return item;
+        // Recalcular si sigue pagado con los pagos restantes
+        const montoPagado = nuevosPagos.reduce((s, p) => {
+          const tx = txsFiltradas.find(t => t.id === p.txId);
+          return s + (tx ? Math.abs(tx.total) : 0);
+        }, 0);
+        const estaPagado = montoPagado >= item.monto;
+        const ultimoPago = nuevosPagos[nuevosPagos.length - 1] || null;
+        return {
+          ...item,
+          pagos: nuevosPagos,
+          txId: ultimoPago?.txId || null,
+          pagadoCon:   estaPagado ? (ultimoPago?.cuenta || null)   : null,
+          tarjetaPago: estaPagado ? (ultimoPago?.tarjeta || null)  : null,
+        };
+      });
     });
     return {
       ...prev,
-      transacciones: prev.transacciones.filter(t => t.id !== id),
+      transacciones: txsFiltradas,
       presupuestosDetalle: newDetalle,
     };
   });
@@ -544,25 +559,34 @@ export function FinanzasProvider({ children }) {
       };
     });
 
-  // Marca un item de presupuesto como pagado y crea la transacción en un solo update
-  // montoCustom permite sobrescribir el monto del item (p.ej. cuando el usuario recibe un pago parcial)
+  // Helpers para leer pagos de un item (soporta modelo viejo txId y nuevo pagos:[])
+  function getItemPagos(item) {
+    if (item.pagos?.length) return item.pagos;
+    if (item.txId) return [{ txId: item.txId, cuenta: item.pagadoCon, tarjeta: item.tarjetaPago || null }];
+    return [];
+  }
+  function getItemMontoPagado(item, transacciones) {
+    return getItemPagos(item).reduce((s, p) => {
+      const tx = transacciones.find(t => t.id === p.txId);
+      return s + (tx ? Math.abs(tx.total) : 0);
+    }, 0);
+  }
+
+  // Agrega un pago (parcial o total) al item. Permite múltiples llamadas hasta cubrir el monto.
   const pagarPresupuestoItem = (mes, id, cuenta, tarjeta = null, montoCustom = null) =>
     update(prev => {
       const detalles = prev.presupuestosDetalle[mes] || [];
       const item = detalles.find(d => d.id === id);
-      if (!item || item.pagadoCon) return prev;
+      if (!item) return prev;
+
       const esIngreso = (prev.categoriasIngreso || []).includes(item.categoria);
-      const montoFinal = montoCustom ?? item.monto;
-      // Evitar duplicado: si ya existe tx con mismo concepto+mes+movimiento, solo vincula
-      const mov = esIngreso ? 'Ingreso' : 'Egreso';
-      const existing = prev.transacciones.find(t =>
-        t.mes === mes && t.movimiento === mov &&
-        t.concepto?.toLowerCase() === item.concepto?.toLowerCase()
-      );
-      if (existing) {
-        const updated = detalles.map(d => d.id === id ? { ...d, pagadoCon: cuenta, tarjetaPago: tarjeta || null, txId: existing.id } : d);
-        return { ...prev, presupuestosDetalle: { ...prev.presupuestosDetalle, [mes]: updated } };
-      }
+      const montoPagadoAntes = getItemMontoPagado(item, prev.transacciones);
+      const restante = item.monto - montoPagadoAntes;
+      if (restante <= 0) return prev; // ya completamente pagado
+
+      const montoFinal = Math.min(montoCustom ?? item.monto, restante);
+      if (montoFinal <= 0) return prev;
+
       const txId = Date.now();
       const tx = {
         id: txId,
@@ -578,7 +602,19 @@ export function FinanzasProvider({ children }) {
         fecha: new Date().toISOString(),
         mes,
       };
-      const updated = detalles.map(d => d.id === id ? { ...d, pagadoCon: cuenta, tarjetaPago: tarjeta || null, txId } : d);
+
+      const nuevosPagos = [...getItemPagos(item), { txId, cuenta, tarjeta: tarjeta || null, monto: montoFinal }];
+      const montoPagadoTotal = montoPagadoAntes + montoFinal;
+      const estaPagado = montoPagadoTotal >= item.monto;
+
+      const updated = detalles.map(d => d.id === id ? {
+        ...d,
+        pagos: nuevosPagos,
+        txId: txId, // último txId para compat con deleteTransaccion viejo
+        pagadoCon: estaPagado ? cuenta : null,
+        tarjetaPago: estaPagado ? (tarjeta || null) : null,
+      } : d);
+
       return {
         ...prev,
         presupuestosDetalle: { ...prev.presupuestosDetalle, [mes]: updated },
@@ -586,17 +622,21 @@ export function FinanzasProvider({ children }) {
       };
     });
 
-  // Deshace el pago: elimina la transacción vinculada y limpia el item
+  // Deshace TODOS los pagos del item: elimina todas las transacciones vinculadas y limpia el item
   const despagarPresupuestoItem = (mes, id) =>
     update(prev => {
       const detalles = prev.presupuestosDetalle[mes] || [];
       const item = detalles.find(d => d.id === id);
-      if (!item?.pagadoCon) return prev;
-      const updated = detalles.map(d => d.id === id ? { ...d, pagadoCon: null, tarjetaPago: null, txId: null } : d);
+      if (!item) return prev;
+      const pagos = getItemPagos(item);
+      const txIdsAEliminar = new Set(pagos.map(p => p.txId).filter(Boolean));
+      const updated = detalles.map(d => d.id === id ? { ...d, pagadoCon: null, tarjetaPago: null, txId: null, pagos: [] } : d);
       return {
         ...prev,
         presupuestosDetalle: { ...prev.presupuestosDetalle, [mes]: updated },
-        transacciones: item.txId ? prev.transacciones.filter(t => t.id !== item.txId) : prev.transacciones,
+        transacciones: txIdsAEliminar.size > 0
+          ? prev.transacciones.filter(t => !txIdsAEliminar.has(t.id))
+          : prev.transacciones,
       };
     });
 

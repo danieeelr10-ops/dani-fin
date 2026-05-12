@@ -175,19 +175,28 @@ function CategoryAccordion({ cat, items, presupuesto, pagadoCat, txById, esIngre
           {tieneItems ? (
             // Sub-items pre-definidos
             items.map(item => {
-              const pagadoItem = item.pagadoCon ? Math.abs((txById[item.txId] || {}).total || item.monto) : 0;
-              const itemPagado = !!item.pagadoCon;
+              // Soporte modelo nuevo (pagos[]) y viejo (txId)
+              const pagos = item.pagos?.length ? item.pagos : (item.txId ? [{ txId: item.txId }] : []);
+              const pagadoItem = pagos.reduce((s, p) => {
+                const tx = txById[p.txId];
+                return s + (tx ? Math.abs(tx.total) : 0);
+              }, 0);
+              const restante   = Math.max(item.monto - pagadoItem, 0);
+              const itemPagado = pagadoItem >= item.monto && item.monto > 0;
+              const parcial    = pagadoItem > 0 && !itemPagado;
               return (
-                <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.875, borderRadius: '10px', bgcolor: itemPagado ? alpha(GREEN, 0.05) : '#F9FAFB', border: `1px solid ${itemPagado ? alpha(GREEN, 0.15) : BORDER}` }}>
+                <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.875, borderRadius: '10px', bgcolor: itemPagado ? alpha(GREEN, 0.05) : parcial ? 'rgba(251,191,36,0.04)' : '#F9FAFB', border: `1px solid ${itemPagado ? alpha(GREEN, 0.15) : parcial ? 'rgba(251,191,36,0.25)' : BORDER}` }}>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography sx={{ fontSize: 13, fontWeight: 600, color: T1 }}>{item.concepto}</Typography>
-                    <Typography sx={{ fontSize: 11, color: itemPagado ? GREEN : T2 }}>{fmtCOP(item.monto)}</Typography>
+                    <Typography sx={{ fontSize: 11, color: itemPagado ? GREEN : parcial ? '#D97706' : T2 }}>
+                      {parcial ? `${fmtCOP(pagadoItem)} / ${fmtCOP(item.monto)} · falta ${fmtCOP(restante)}` : fmtCOP(item.monto)}
+                    </Typography>
                   </Box>
                   {itemPagado
                     ? <Typography sx={{ fontSize: 11, fontWeight: 700, color: GREEN, bgcolor: alpha(GREEN, 0.1), px: 0.75, py: 0.25, borderRadius: '6px' }}>✓ Pagado</Typography>
                     : <Box component="button" onClick={e => { e.stopPropagation(); onOpenItem(item, pagadoItem); }}
-                        sx={{ px: 1.25, py: 0.5, borderRadius: '8px', border: `1px solid ${T1}`, bgcolor: T1, color: '#fff', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>
-                        Pagar
+                        sx={{ px: 1.25, py: 0.5, borderRadius: '8px', border: `1px solid ${T1}`, bgcolor: T1, color: '#fff', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', flexShrink: 0 }}>
+                        {parcial ? `Pagar más` : 'Pagar'}
                       </Box>
                   }
                 </Box>
