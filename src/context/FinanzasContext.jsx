@@ -428,7 +428,22 @@ export function FinanzasProvider({ children }) {
   }
 
   const addTransaccion    = (tx)   => update(prev => ({ ...prev, transacciones: [tx, ...prev.transacciones] }));
-  const deleteTransaccion = (id)   => update(prev => ({ ...prev, transacciones: prev.transacciones.filter(t => t.id !== id) }));
+  const deleteTransaccion = (id) => update(prev => {
+    // Limpiar el item de presupuestosDetalle que tenga este txId
+    const newDetalle = {};
+    Object.entries(prev.presupuestosDetalle || {}).forEach(([mes, items]) => {
+      newDetalle[mes] = (items || []).map(item =>
+        String(item.txId) === String(id)
+          ? { ...item, pagadoCon: null, tarjetaPago: null, txId: null }
+          : item
+      );
+    });
+    return {
+      ...prev,
+      transacciones: prev.transacciones.filter(t => t.id !== id),
+      presupuestosDetalle: newDetalle,
+    };
+  });
   const updateTransaccion = (id, changes) => update(prev => ({ ...prev, transacciones: prev.transacciones.map(t => t.id === id ? { ...t, ...changes } : t) }));
   // Asignar tarjeta en bloque a todas las tx de T.C sin tarjeta asignada
   const bulkAssignTarjeta = (nombreTarjeta) => update(prev => ({
