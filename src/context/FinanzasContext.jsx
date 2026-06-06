@@ -626,54 +626,57 @@ export function FinanzasProvider({ children }) {
         setSyncing(false);
       });
 
-    // Suscripción en tiempo real — escucha INSERT y UPDATE
+    // Función de re-fetch: compara lastModified y aplica si el remoto es más nuevo
+    async function fetchAndSync() {
+      try {
+        const { data } = await supabase
+          .from('user_data')
+          .select('data')
+          .eq('user_id', user.id)
+          .single();
+        if (!data?.data) return;
+        const remote = mergeWithDefaults(data.data);
+        const local  = loadFromStorage();
+        if ((remote.lastModified || 0) > (local.lastModified || 0)) {
+          setState(remote);
+          persistLocal(remote);
+        }
+      } catch {}
+    }
+
+    // Polling cada 15 segundos — detecta cambios de otros dispositivos
+    const pollInterval = setInterval(fetchAndSync, 15000);
+
+    // Al volver al foco (mobile background, cambio de pestaña) → sync inmediato
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') fetchAndSync();
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Suscripción en tiempo real (funciona si Realtime está habilitado en Supabase)
     const channel = supabase
       .channel(`user_data:${user.id}`)
       .on('postgres_changes', {
-        event: '*',           // INSERT + UPDATE + DELETE
+        event: '*',
         schema: 'public',
         table: 'user_data',
         filter: `user_id=eq.${user.id}`,
       }, payload => {
         const incoming = payload.new?.data;
         if (!incoming) return;
-        const loaded    = mergeWithDefaults(incoming);
-        const current   = loadFromStorage();
-        // Solo aplicar si el dato remoto es más reciente que lo que ya tenemos
+        const loaded  = mergeWithDefaults(incoming);
+        const current = loadFromStorage();
         if ((loaded.lastModified || 0) > (current.lastModified || 0)) {
           setState(loaded);
           persistLocal(loaded);
         }
       })
-      .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR') {
-          console.warn('[Supabase RT] canal con error, reconectando...');
-        }
-      });
-
-    // Reconectar cuando el usuario vuelve a la pestaña / app (mobile background)
-    function handleVisibilityChange() {
-      if (document.visibilityState !== 'visible') return;
-      supabase
-        .from('user_data')
-        .select('data')
-        .eq('user_id', user.id)
-        .single()
-        .then(({ data }) => {
-          if (!data?.data) return;
-          const remote  = mergeWithDefaults(data.data);
-          const local   = loadFromStorage();
-          if ((remote.lastModified || 0) > (local.lastModified || 0)) {
-            setState(remote);
-            persistLocal(remote);
-          }
-        });
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+      .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      supabase.removeChannel(channel);
     };
   }, [user?.id]);
 
