@@ -567,16 +567,23 @@ export function FinanzasProvider({ children }) {
     if (migrationDoneRef.current) return;
     migrationDoneRef.current = true;
     setState(prev => {
+      // Migraciones reales (corren en todos los entornos)
       const { state: s1, changed: c1 } = fixIngresosFijos(prev);
       const { state: s2, changed: c2 } = migrateMercadoOrphans(s1);
-      const { state: s3, changed: c3 } = seedNuAbril(s2);
-      const { state: s4, changed: c4 } = seedNuMarzo(s3);
-      const { state: s5, changed: c5 } = seedLocal2026(s4);
-      const { state: s5b, changed: c5b } = addTarjetaNu(s5);
-      const { state: s6, changed: c6 } = seedCierresPrueba(s5b);
-      if (!c1 && !c2 && !c3 && !c4 && !c5 && !c5b && !c6) return prev;
+      const { state: s2b, changed: c2b } = addTarjetaNu(s2);
+
+      // Seeds solo en desarrollo local — NUNCA en producción para no sobreescribir datos reales
+      const { state: s3, changed: c3 } = IS_DEV ? seedNuAbril(s2b)       : { state: s2b, changed: false };
+      const { state: s4, changed: c4 } = IS_DEV ? seedNuMarzo(s3)        : { state: s3,  changed: false };
+      const { state: s5, changed: c5 } = IS_DEV ? seedLocal2026(s4)      : { state: s4,  changed: false };
+      const { state: s6, changed: c6 } = IS_DEV ? seedCierresPrueba(s5)  : { state: s5,  changed: false };
+
+      if (!c1 && !c2 && !c2b && !c3 && !c4 && !c5 && !c6) return prev;
       persistLocal(s6);
-      if (userRef.current) persistRemote(s6, userRef.current.id);
+      // NO escribir a Supabase aquí: el sync remoto (useEffect siguiente) compara
+      // timestamps y decide qué fuente es la más reciente. Si las migraciones
+      // empujaran a Supabase antes de que lleguen los datos remotos, sobreescriben
+      // la data real del usuario en otros dispositivos.
       return s6;
     });
   }, []);

@@ -311,14 +311,33 @@ export default function Layout({ children }) {
   const sidebarWidth = collapsed ? COLLAPSED_W : SIDEBAR_W;
 
   // ── Mobile: bottom nav con drawer "Más" ──────────────────────────────
-  const NAV_TABS = ['/inicio', '/registro', '/flujo'];
-  const moreTabs   = ALL_TABS.filter(t => !NAV_TABS.includes(t.path));
-  const moreActive = moreTabs.some(t => t.path === pathname);
+  const NAV_TABS = ['/inicio', '/historial', '/presupuesto'];
+  const moreActive = ALL_TABS.filter(t => !NAV_TABS.includes(t.path)).some(t => t.path === pathname);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const tabInicio     = ALL_TABS.find(t => t.path === '/inicio');
-  const tabRegistrar  = ALL_TABS.find(t => t.path === '/registro');
-  const tabFlujo      = ALL_TABS.find(t => t.path === '/flujo');
+  const tabInicio      = ALL_TABS.find(t => t.path === '/inicio');
+  const tabHistorial   = ALL_TABS.find(t => t.path === '/historial');
+  const tabPresupuesto = ALL_TABS.find(t => t.path === '/presupuesto');
+
+  // Grupos del drawer "Más"
+  const DRAWER_GROUPS = [
+    {
+      label: 'Registrar',
+      items: ['/flujo', '/registro', '/cobros', '/tc'],
+    },
+    {
+      label: 'Finanzas',
+      items: ['/inversiones', '/metas', '/mercado'],
+    },
+    {
+      label: 'Análisis',
+      items: ['/dashboard', '/reportes', '/ia'],
+    },
+    {
+      label: 'Más',
+      items: ['/habitos', '/config'],
+    },
+  ];
 
   function goTo(path) { navigate(path); setMoreOpen(false); }
 
@@ -388,8 +407,8 @@ export default function Layout({ children }) {
           {/* Inicio */}
           <NavTab tab={tabInicio} active={pathname === '/inicio'} />
 
-          {/* Registrar */}
-          <NavTab tab={tabRegistrar} active={pathname === '/registro'} />
+          {/* Historial */}
+          <NavTab tab={tabHistorial} active={pathname === '/historial'} />
 
           {/* Centro [+] CTA */}
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', pb: '8px' }}>
@@ -410,8 +429,8 @@ export default function Layout({ children }) {
             </Box>
           </Box>
 
-          {/* Flujo */}
-          <NavTab tab={tabFlujo} active={pathname === '/flujo'} />
+          {/* Presupuesto */}
+          <NavTab tab={tabPresupuesto} active={pathname === '/presupuesto'} />
 
           {/* Más */}
           <Box onClick={() => setMoreOpen(o => !o)} sx={{
@@ -434,56 +453,66 @@ export default function Layout({ children }) {
           </Box>
         </Box>
 
-        {/* Drawer "Más" — bottom sheet, lista */}
+        {/* Drawer "Más" — bottom sheet con grupos y grid */}
         {moreOpen && (
           <>
-            <Box onClick={() => setMoreOpen(false)} sx={{ position: 'fixed', inset: 0, zIndex: 300, bgcolor: 'rgba(0,0,0,0.45)' }} />
+            <Box onClick={() => setMoreOpen(false)} sx={{ position: 'fixed', inset: 0, zIndex: 300, bgcolor: 'rgba(0,0,0,0.5)' }} />
             <Box sx={{
               position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 301,
               backgroundColor: '#FFFFFF',
               borderRadius: '20px 20px 0 0',
-              boxShadow: '0 -8px 32px rgba(0,0,0,0.12)',
-              pb: 'env(safe-area-inset-bottom)',
+              boxShadow: '0 -8px 32px rgba(0,0,0,0.14)',
+              pb: 'calc(env(safe-area-inset-bottom) + 8px)',
+              maxHeight: '85dvh',
+              overflowY: 'auto',
             }}>
               {/* Handle */}
-              <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1.25, pb: 0.5 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1.25, pb: 1 }}>
                 <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'rgba(145,158,171,0.3)' }} />
               </Box>
-              <Typography sx={{ px: 2, pb: 0.75, pt: 0.25, fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                Secciones
-              </Typography>
-              {/* Lista */}
-              <Box sx={{ overflowY: 'auto', maxHeight: '60dvh' }}>
-                {moreTabs.map((tab, i) => {
-                  const active = pathname === tab.path;
+
+              <Box sx={{ px: 2, pb: 1.5 }}>
+                {DRAWER_GROUPS.map(group => {
+                  const groupTabs = group.items
+                    .map(path => ALL_TABS.find(t => t.path === path))
+                    .filter(Boolean);
+                  if (groupTabs.length === 0) return null;
                   return (
-                    <Box key={tab.path}>
-                      {i > 0 && <Box sx={{ mx: 2, height: '1px', bgcolor: '#F3F4F6' }} />}
-                      <Box onClick={() => goTo(tab.path)} sx={{
-                        display: 'flex', alignItems: 'center', gap: 1.5,
-                        px: 2, py: 1.375, cursor: 'pointer',
-                        '&:active': { bgcolor: '#F9FAFB' },
-                      }}>
-                        <Box sx={{
-                          width: 36, height: 36, borderRadius: '10px', flexShrink: 0,
-                          bgcolor: active ? 'rgba(0,167,111,0.1)' : '#F3F4F6',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          color: active ? '#00A76F' : '#6B7280',
-                        }}>
-                          {tab.icon}
-                        </Box>
-                        <Typography sx={{ flex: 1, fontSize: 15, fontWeight: active ? 600 : 400, color: active ? '#00A76F' : '#111318', lineHeight: 1 }}>
-                          {tab.label}
-                        </Typography>
-                        <Box sx={{ color: '#D1D5DB', display: 'flex' }}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-                        </Box>
+                    <Box key={group.label} sx={{ mb: 2 }}>
+                      <Typography sx={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', mb: 1.25, px: 0.5 }}>
+                        {group.label}
+                      </Typography>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0.75 }}>
+                        {groupTabs.map(tab => {
+                          const active = pathname === tab.path;
+                          return (
+                            <Box key={tab.path} onClick={() => goTo(tab.path)} sx={{
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.625,
+                              py: 1.25, px: 0.5, borderRadius: '12px', cursor: 'pointer',
+                              bgcolor: active ? 'rgba(0,167,111,0.08)' : '#F9FAFB',
+                              border: '1px solid', borderColor: active ? 'rgba(0,167,111,0.25)' : '#F3F4F6',
+                              '&:active': { opacity: 0.7 },
+                            }}>
+                              <Box sx={{
+                                width: 40, height: 40, borderRadius: '10px',
+                                bgcolor: active ? 'rgba(0,167,111,0.12)' : '#fff',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: active ? '#00A76F' : '#6B7280',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
+                              }}>
+                                {tab.icon}
+                              </Box>
+                              <Typography sx={{ fontSize: 10, fontWeight: active ? 700 : 500, color: active ? '#00A76F' : '#374151', textAlign: 'center', lineHeight: 1.2 }}>
+                                {tab.label}
+                              </Typography>
+                            </Box>
+                          );
+                        })}
                       </Box>
                     </Box>
                   );
                 })}
               </Box>
-              <Box sx={{ height: '8px' }} />
             </Box>
           </>
         )}
