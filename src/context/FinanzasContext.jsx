@@ -626,24 +626,55 @@ export function FinanzasProvider({ children }) {
         setSyncing(false);
       });
 
-    // Suscripción en tiempo real
+    // Suscripción en tiempo real — escucha INSERT y UPDATE
     const channel = supabase
       .channel(`user_data:${user.id}`)
       .on('postgres_changes', {
-        event: 'UPDATE',
+        event: '*',           // INSERT + UPDATE + DELETE
         schema: 'public',
         table: 'user_data',
         filter: `user_id=eq.${user.id}`,
       }, payload => {
-        if (payload.new?.data) {
-          const loaded = mergeWithDefaults(payload.new.data);
+        const incoming = payload.new?.data;
+        if (!incoming) return;
+        const loaded    = mergeWithDefaults(incoming);
+        const current   = loadFromStorage();
+        // Solo aplicar si el dato remoto es más reciente que lo que ya tenemos
+        if ((loaded.lastModified || 0) > (current.lastModified || 0)) {
           setState(loaded);
           persistLocal(loaded);
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.warn('[Supabase RT] canal con error, reconectando...');
+        }
+      });
 
-    return () => supabase.removeChannel(channel);
+    // Reconectar cuando el usuario vuelve a la pestaña / app (mobile background)
+    function handleVisibilityChange() {
+      if (document.visibilityState !== 'visible') return;
+      supabase
+        .from('user_data')
+        .select('data')
+        .eq('user_id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (!data?.data) return;
+          const remote  = mergeWithDefaults(data.data);
+          const local   = loadFromStorage();
+          if ((remote.lastModified || 0) > (local.lastModified || 0)) {
+            setState(remote);
+            persistLocal(remote);
+          }
+        });
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      supabase.removeChannel(channel);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [user?.id]);
 
   function update(updater) {
