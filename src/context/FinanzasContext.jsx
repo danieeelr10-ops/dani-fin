@@ -7,6 +7,7 @@ import {
 import { supabase } from 'src/lib/supabase';
 import { useAuth } from 'src/context/AuthContext';
 import { getMesActual } from 'src/utils/format';
+import { computeMetrics } from 'src/utils/metrics';
 
 const EMPTY_PRESUPUESTOS = Object.fromEntries(MESES.map(m => [m, {}]));
 const EMPTY_DETALLE      = Object.fromEntries(MESES.map(m => [m, []]));
@@ -30,6 +31,10 @@ const INITIAL_STATE = {
   habitosFrozen: {},
   saldosIniciales: {},
   plantilla: {},
+  cierresMensuales: {},
+  perfilIngresos: 'variable',
+  metasPersonalizadas: [],
+  nombreUsuario: '',
   lastModified: 0,
 };
 
@@ -60,6 +65,10 @@ function mergeWithDefaults(p) {
     habitosFrozen:            p.habitosFrozen            || {},
     saldosIniciales:          p.saldosIniciales          || {},
     plantilla:                p.plantilla                || {},
+    cierresMensuales:         p.cierresMensuales         || {},
+    perfilIngresos:           p.perfilIngresos           || 'variable',
+    metasPersonalizadas:      p.metasPersonalizadas      || [],
+    nombreUsuario:            p.nombreUsuario            || '',
     lastModified:             p.lastModified             || 0,
   };
 }
@@ -318,6 +327,229 @@ function recalcPresupuestoFromDetalle(mesData, detalles) {
 
 const FinanzasContext = createContext(null);
 
+// Seed completo Enero–Junio 2026
+function seedLocal2026(s) {
+  const FLAG = 'seed_local_2026_v1';
+  try { if (localStorage.getItem(FLAG)) return { state: s, changed: false }; } catch(e) {}
+  if ((s.transacciones?.length || 0) > 30) return { state: s, changed: false };
+
+  const fijo = (id, mes, fecha, cat, concepto, total, cuenta = 'Efectivo') =>
+    ({ id, mes, fecha, tipo: 'Fijo', movimiento: 'Egreso', categoria: cat, concepto, total, pago: total, saldo: 0, cuenta })
+  const vari = (id, mes, fecha, cat, concepto, total, cuenta = 'T.C') =>
+    ({ id, mes, fecha, tipo: 'Variable', movimiento: 'Egreso', categoria: cat, concepto, total, pago: total, saldo: 0, cuenta })
+  const ing = (id, mes, fecha, cat, concepto, total, cuenta = 'Nequi') =>
+    ({ id, mes, fecha, tipo: 'Fijo', movimiento: 'Ingreso', categoria: cat, concepto, total, pago: total, saldo: 0, cuenta })
+
+  let id = 2000
+  const next = () => ++id
+
+  const txs = [
+    // ── ENERO (M1) ─────────────────────────────────────────────
+    ing(next(),'M1','2026-01-05','Sueldo','Lau y Javi',480000),
+    ing(next(),'M1','2026-01-05','Sueldo','Vittoria',1476000),
+    ing(next(),'M1','2026-01-05','Sueldo','Julio',200000),
+    ing(next(),'M1','2026-01-05','Sueldo','Laurent',700000),
+    ing(next(),'M1','2026-01-05','Sueldo','Vero',840000),
+    ing(next(),'M1','2026-01-10','Trabajo extra','Sesiones extra',350000),
+    fijo(next(),'M1','2026-01-05','Hogar','Arriendo',1700000),
+    fijo(next(),'M1','2026-01-05','Hogar','Internet',53800),
+    fijo(next(),'M1','2026-01-05','Hogar','Luz',42000),
+    fijo(next(),'M1','2026-01-05','Hogar','Gas',27000),
+    fijo(next(),'M1','2026-01-05','Hogar','Agua',37000),
+    fijo(next(),'M1','2026-01-05','Hogar','Servicios Mazuren',220000),
+    fijo(next(),'M1','2026-01-05','Familia','Papa',400000),
+    fijo(next(),'M1','2026-01-05','Salud','Compensar',537100),
+    fijo(next(),'M1','2026-01-05','Trabajo','Arriendo GYM',300000,'Nequi'),
+    fijo(next(),'M1','2026-01-05','Ahorro','Ahorro mensual',300000,'Nequi'),
+    fijo(next(),'M1','2026-01-05','Entretenimiento','Apple',44900,'T.C'),
+    fijo(next(),'M1','2026-01-05','Entretenimiento','DIRECTV',80000,'T.C'),
+    fijo(next(),'M1','2026-01-05','Trabajo','Claude',76000,'T.C'),
+    fijo(next(),'M1','2026-01-05','Trabajo','Canva',23000,'T.C'),
+    fijo(next(),'M1','2026-01-05','Extras','Celu',46400,'T.C'),
+    vari(next(),'M1','2026-01-08','Mercado','Mercado semana 1',185000),
+    vari(next(),'M1','2026-01-15','Mercado','Mercado semana 2',162000),
+    vari(next(),'M1','2026-01-22','Mercado','Mercado semana 3',143000),
+    vari(next(),'M1','2026-01-10','Transporte','Ubers semana',45000),
+    vari(next(),'M1','2026-01-18','Salidas','Comida fuera',65000),
+    vari(next(),'M1','2026-01-25','Entretenimiento','Cine',32000),
+
+    // ── FEBRERO (M2) ───────────────────────────────────────────
+    ing(next(),'M2','2026-02-05','Sueldo','Lau y Javi',480000),
+    ing(next(),'M2','2026-02-05','Sueldo','Vittoria',1476000),
+    ing(next(),'M2','2026-02-05','Sueldo','Julio',200000),
+    ing(next(),'M2','2026-02-05','Sueldo','Laurent',700000),
+    ing(next(),'M2','2026-02-05','Sueldo','Felipe y Juana',760000),
+    ing(next(),'M2','2026-02-05','Sueldo','Diego O',110000),
+    ing(next(),'M2','2026-02-14','Trabajo extra','Consultoría',500000),
+    fijo(next(),'M2','2026-02-05','Hogar','Arriendo',1700000),
+    fijo(next(),'M2','2026-02-05','Hogar','Internet',53800),
+    fijo(next(),'M2','2026-02-05','Hogar','Luz',39000),
+    fijo(next(),'M2','2026-02-05','Hogar','Gas',25000),
+    fijo(next(),'M2','2026-02-05','Hogar','Agua',37000),
+    fijo(next(),'M2','2026-02-05','Hogar','Servicios Mazuren',220000),
+    fijo(next(),'M2','2026-02-05','Familia','Papa',400000),
+    fijo(next(),'M2','2026-02-05','Salud','Compensar',537100),
+    fijo(next(),'M2','2026-02-05','Trabajo','Arriendo GYM',300000,'Nequi'),
+    fijo(next(),'M2','2026-02-05','Ahorro','Ahorro mensual',400000,'Nequi'),
+    fijo(next(),'M2','2026-02-05','Inversion','VOO',200000,'Nequi'),
+    fijo(next(),'M2','2026-02-05','Entretenimiento','Apple',44900,'T.C'),
+    fijo(next(),'M2','2026-02-05','Entretenimiento','DIRECTV',80000,'T.C'),
+    fijo(next(),'M2','2026-02-05','Trabajo','Claude',76000,'T.C'),
+    fijo(next(),'M2','2026-02-05','Trabajo','Canva',23000,'T.C'),
+    fijo(next(),'M2','2026-02-05','Extras','Celu',46400,'T.C'),
+    vari(next(),'M2','2026-02-07','Mercado','Mercado semana 1',172000),
+    vari(next(),'M2','2026-02-14','Mercado','Mercado semana 2',155000),
+    vari(next(),'M2','2026-02-21','Mercado','Mercado semana 3',180000),
+    vari(next(),'M2','2026-02-14','Salidas','San Valentín salida',95000),
+    vari(next(),'M2','2026-02-10','Transporte','Ubers',38000),
+    vari(next(),'M2','2026-02-20','Regalos','Regalo San Valentín',120000,'T.C'),
+
+    // ── MARZO (M3) ─────────────────────────────────────────────
+    ing(next(),'M3','2026-03-05','Sueldo','Lau y Javi',480000),
+    ing(next(),'M3','2026-03-05','Sueldo','Vittoria',1576000),
+    ing(next(),'M3','2026-03-05','Sueldo','Julio',200000),
+    ing(next(),'M3','2026-03-05','Sueldo','Laurent',700000),
+    ing(next(),'M3','2026-03-05','Sueldo','Vero',840000),
+    ing(next(),'M3','2026-03-05','Sueldo','Felipe y Juana',760000),
+    ing(next(),'M3','2026-03-05','Sueldo','Diego O',110000),
+    ing(next(),'M3','2026-03-15','Trabajo extra','Coaching online',800000),
+    fijo(next(),'M3','2026-03-05','Hogar','Arriendo',1700000),
+    fijo(next(),'M3','2026-03-05','Hogar','Internet',53800),
+    fijo(next(),'M3','2026-03-05','Hogar','Luz',44000),
+    fijo(next(),'M3','2026-03-05','Hogar','Gas',28000),
+    fijo(next(),'M3','2026-03-05','Hogar','Agua',37000),
+    fijo(next(),'M3','2026-03-05','Hogar','Servicios Mazuren',220000),
+    fijo(next(),'M3','2026-03-05','Familia','Papa',400000),
+    fijo(next(),'M3','2026-03-05','Salud','Compensar',537100),
+    fijo(next(),'M3','2026-03-05','Trabajo','Arriendo GYM',300000,'Nequi'),
+    fijo(next(),'M3','2026-03-05','Ahorro','Ahorro mensual',600000,'Nequi'),
+    fijo(next(),'M3','2026-03-05','Inversion','VOO',200000,'Nequi'),
+    fijo(next(),'M3','2026-03-05','Entretenimiento','Apple',44900,'T.C'),
+    fijo(next(),'M3','2026-03-05','Entretenimiento','DIRECTV',80000,'T.C'),
+    fijo(next(),'M3','2026-03-05','Trabajo','Claude',76000,'T.C'),
+    fijo(next(),'M3','2026-03-05','Trabajo','Canva',23000,'T.C'),
+    fijo(next(),'M3','2026-03-05','Extras','Celu',46400,'T.C'),
+    vari(next(),'M3','2026-03-07','Mercado','Mercado semana 1',195000),
+    vari(next(),'M3','2026-03-14','Mercado','Mercado semana 2',168000),
+    vari(next(),'M3','2026-03-21','Mercado','Mercado semana 3',175000),
+    vari(next(),'M3','2026-03-10','Transporte','Ubers',52000),
+    vari(next(),'M3','2026-03-22','Salidas','Cena cumpleaños',85000),
+    vari(next(),'M3','2026-03-28','Vacaciones','Paseo Girardot',350000,'T.C'),
+
+    // ── MAYO (M5) ──────────────────────────────────────────────
+    ing(next(),'M5','2026-05-05','Sueldo','Lau y Javi',480000),
+    ing(next(),'M5','2026-05-05','Sueldo','Vittoria',1476000),
+    ing(next(),'M5','2026-05-05','Sueldo','Julio',200000),
+    ing(next(),'M5','2026-05-05','Sueldo','Laurent',700000),
+    ing(next(),'M5','2026-05-05','Sueldo','Vero',840000),
+    ing(next(),'M5','2026-05-05','Sueldo','Felipe y Juana',760000),
+    fijo(next(),'M5','2026-05-05','Hogar','Arriendo',1700000),
+    fijo(next(),'M5','2026-05-05','Hogar','Internet',53800),
+    fijo(next(),'M5','2026-05-05','Hogar','Luz',47000),
+    fijo(next(),'M5','2026-05-05','Hogar','Gas',29000),
+    fijo(next(),'M5','2026-05-05','Hogar','Agua',37000),
+    fijo(next(),'M5','2026-05-05','Hogar','Servicios Mazuren',220000),
+    fijo(next(),'M5','2026-05-05','Familia','Papa',400000),
+    fijo(next(),'M5','2026-05-05','Salud','Compensar',537100),
+    fijo(next(),'M5','2026-05-05','Trabajo','Arriendo GYM',300000,'Nequi'),
+    fijo(next(),'M5','2026-05-05','Ahorro','Ahorro mensual',300000,'Nequi'),
+    fijo(next(),'M5','2026-05-05','Entretenimiento','Apple',44900,'T.C'),
+    fijo(next(),'M5','2026-05-05','Entretenimiento','DIRECTV',80000,'T.C'),
+    fijo(next(),'M5','2026-05-05','Trabajo','Claude',76000,'T.C'),
+    fijo(next(),'M5','2026-05-05','Trabajo','Canva',23000,'T.C'),
+    fijo(next(),'M5','2026-05-05','Extras','Celu',46400,'T.C'),
+    vari(next(),'M5','2026-05-08','Mercado','Mercado semana 1',188000),
+    vari(next(),'M5','2026-05-15','Mercado','Mercado semana 2',165000),
+    vari(next(),'M5','2026-05-22','Mercado','Mercado semana 3',192000),
+    vari(next(),'M5','2026-05-12','Transporte','Ubers',43000),
+    vari(next(),'M5','2026-05-18','Salidas','Salida amigos',78000),
+    vari(next(),'M5','2026-05-25','Regalos','Día de la madre',180000,'T.C'),
+    vari(next(),'M5','2026-05-20','Salud','Médico',85000,'Nequi'),
+    vari(next(),'M5','2026-05-28','Extras','Compra ropa',245000,'T.C'),
+
+    // ── JUNIO (M6) ─────────────────────────────────────────────
+    ing(next(),'M6','2026-06-02','Sueldo','Lau y Javi',480000),
+    ing(next(),'M6','2026-06-02','Sueldo','Vittoria',1576000),
+    ing(next(),'M6','2026-06-02','Sueldo','Julio',200000),
+    ing(next(),'M6','2026-06-02','Sueldo','Laurent',700000),
+    ing(next(),'M6','2026-06-02','Sueldo','Vero',840000),
+    ing(next(),'M6','2026-06-02','Sueldo','Felipe y Juana',760000),
+    ing(next(),'M6','2026-06-02','Sueldo','Diego O',110000),
+    fijo(next(),'M6','2026-06-02','Hogar','Arriendo',1700000),
+    fijo(next(),'M6','2026-06-02','Hogar','Internet',53800),
+    fijo(next(),'M6','2026-06-02','Hogar','Luz',41000),
+    fijo(next(),'M6','2026-06-02','Hogar','Gas',26000),
+    fijo(next(),'M6','2026-06-02','Hogar','Agua',37000),
+    fijo(next(),'M6','2026-06-02','Hogar','Servicios Mazuren',220000),
+    fijo(next(),'M6','2026-06-02','Familia','Papa',400000),
+    fijo(next(),'M6','2026-06-02','Salud','Compensar',537100),
+    fijo(next(),'M6','2026-06-02','Trabajo','Arriendo GYM',300000,'Nequi'),
+    fijo(next(),'M6','2026-06-02','Ahorro','Ahorro mensual',400000,'Nequi'),
+    fijo(next(),'M6','2026-06-02','Inversion','VOO',200000,'Nequi'),
+    fijo(next(),'M6','2026-06-02','Entretenimiento','Apple',44900,'T.C'),
+    fijo(next(),'M6','2026-06-02','Entretenimiento','DIRECTV',80000,'T.C'),
+    fijo(next(),'M6','2026-06-02','Trabajo','Claude',76000,'T.C'),
+    fijo(next(),'M6','2026-06-02','Trabajo','Canva',23000,'T.C'),
+    fijo(next(),'M6','2026-06-02','Extras','Celu',46400,'T.C'),
+    vari(next(),'M6','2026-06-02','Mercado','Mercado semana 1',178000),
+    vari(next(),'M6','2026-06-02','Transporte','Ubers',35000),
+  ]
+
+  // Tarjeta "Nu" con día de pago 15
+  const tarjetas = (s.tarjetas?.length > 0) ? s.tarjetas : [
+    { id: 9001, nombre: 'Nu', diaPago: 15 }
+  ]
+
+  // Asignar tarjeta 'Nu' a todas las tx TC del seed
+  const txsConTarjeta = txs.map(t => t.cuenta === 'T.C' ? { ...t, tarjeta: 'Nu' } : t)
+
+  try { localStorage.setItem(FLAG, '1'); } catch(e) {}
+  return {
+    state: { ...s, tarjetas, transacciones: [...(s.transacciones || []), ...txsConTarjeta] },
+    changed: true,
+  }
+}
+
+// Migración: asigna tarjeta 'Nu' a txs TC sin tarjeta y agrega la tarjeta si no existe
+function addTarjetaNu(s) {
+  const FLAG = 'add_tarjeta_nu_v1';
+  try { if (localStorage.getItem(FLAG)) return { state: s, changed: false }; } catch(e) {}
+
+  let changed = false;
+  // Agregar Nu si no hay tarjetas
+  let tarjetas = s.tarjetas || [];
+  if (tarjetas.length === 0) {
+    tarjetas = [{ id: 9001, nombre: 'Nu', diaPago: 15 }];
+    changed = true;
+  }
+  // Asignar 'Nu' a txs TC sin tarjeta
+  const txs = (s.transacciones || []).map(t => {
+    if (t.cuenta === 'T.C' && !t.tarjeta) { changed = true; return { ...t, tarjeta: 'Nu' }; }
+    return t;
+  });
+
+  try { localStorage.setItem(FLAG, '1'); } catch(e) {}
+  if (!changed) return { state: s, changed: false };
+  return { state: { ...s, tarjetas, transacciones: txs }, changed: true };
+}
+
+// Seed: agrega cierres mensuales de prueba si no hay ninguno (solo en local/dev)
+function seedCierresPrueba(s) {
+  const FLAG = 'seed_cierres_prueba_v1';
+  try { if (localStorage.getItem(FLAG)) return { state: s, changed: false }; } catch(e) {}
+  if (Object.keys(s.cierresMensuales || {}).length > 0) {
+    try { localStorage.setItem(FLAG, '1'); } catch(e) {}
+    return { state: s, changed: false };
+  }
+  const cierres = {
+    'M4': { mes: 'M4', year: 2026, total_income: 4200000, total_expenses: 3600000, closing_balance: 600000,  carry_over_amount: 600000,  created_at: '2026-04-30T23:59:00.000Z' },
+    'M5': { mes: 'M5', year: 2026, total_income: 3800000, total_expenses: 4100000, closing_balance: -300000, carry_over_amount: 0,        created_at: '2026-05-31T23:59:00.000Z' },
+    'M6': { mes: 'M6', year: 2026, total_income: 3000000, total_expenses: 2400000, closing_balance: 600000,  carry_over_amount: 600000,  created_at: '2026-06-30T23:59:00.000Z' },
+  };
+  try { localStorage.setItem(FLAG, '1'); } catch(e) {}
+  return { state: { ...s, cierresMensuales: cierres }, changed: true };
+}
+
 export function FinanzasProvider({ children }) {
   const { user } = useAuth();
   const [state, setState] = useState(loadFromStorage);
@@ -339,10 +571,13 @@ export function FinanzasProvider({ children }) {
       const { state: s2, changed: c2 } = migrateMercadoOrphans(s1);
       const { state: s3, changed: c3 } = seedNuAbril(s2);
       const { state: s4, changed: c4 } = seedNuMarzo(s3);
-      if (!c1 && !c2 && !c3 && !c4) return prev;
-      persistLocal(s4);
-      if (userRef.current) persistRemote(s4, userRef.current.id);
-      return s4;
+      const { state: s5, changed: c5 } = seedLocal2026(s4);
+      const { state: s5b, changed: c5b } = addTarjetaNu(s5);
+      const { state: s6, changed: c6 } = seedCierresPrueba(s5b);
+      if (!c1 && !c2 && !c3 && !c4 && !c5 && !c5b && !c6) return prev;
+      persistLocal(s6);
+      if (userRef.current) persistRemote(s6, userRef.current.id);
+      return s6;
     });
   }, []);
 
@@ -623,6 +858,19 @@ export function FinanzasProvider({ children }) {
     });
 
   // Deshace TODOS los pagos del item: elimina todas las transacciones vinculadas y limpia el item
+  // Marca como pagados todos los items del plan de una tarjeta en un mes
+  function liquidarTC(mes, tarjetaNombre, cuentaPago) {
+    update(prev => {
+      const detalles = prev.presupuestosDetalle[mes] || [];
+      const updated = detalles.map(item => {
+        if (item.tarjeta !== tarjetaNombre) return item;
+        if (item.pagadoCon) return item; // ya pagado
+        return { ...item, pagadoCon: cuentaPago, tarjetaPago: tarjetaNombre };
+      });
+      return { ...prev, presupuestosDetalle: { ...prev.presupuestosDetalle, [mes]: updated } };
+    });
+  }
+
   const despagarPresupuestoItem = (mes, id) =>
     update(prev => {
       const detalles = prev.presupuestosDetalle[mes] || [];
@@ -685,6 +933,64 @@ export function FinanzasProvider({ children }) {
     });
   }
 
+  // ── Cierre mensual y saldo trasladado ────────────────────────
+  function closeMonth(mes) {
+    update(prev => {
+      const m = computeMetrics(prev.transacciones || [], mes);
+      const balance = m.neto;
+      const carry_over = balance > 0 ? balance : 0;
+      const cierre = {
+        mes,
+        year: new Date().getFullYear(),
+        total_income:    m.ing,
+        total_expenses:  m.egCash,
+        closing_balance: balance,
+        carry_over_amount: carry_over,
+        created_at: new Date().toISOString(),
+      };
+      return { ...prev, cierresMensuales: { ...prev.cierresMensuales, [mes]: cierre } };
+    });
+  }
+
+  function getCarryOver(mes) {
+    const idx = parseInt(mes.replace('M', ''));
+    if (idx <= 1) return 0;
+    const prevMes = `M${idx - 1}`;
+    return state.cierresMensuales?.[prevMes]?.carry_over_amount || 0;
+  }
+
+  function getCierre(mes) {
+    return state.cierresMensuales?.[mes] || null;
+  }
+
+  function deleteCierre(mes) {
+    update(prev => {
+      const next = { ...prev.cierresMensuales };
+      delete next[mes];
+      return { ...prev, cierresMensuales: next };
+    });
+  }
+
+  function savePerfilIngresos(perfil) {
+    update(prev => ({ ...prev, perfilIngresos: perfil }));
+  }
+
+  function saveNombreUsuario(nombre) {
+    update(prev => ({ ...prev, nombreUsuario: nombre }));
+  }
+
+  function addMetaPersonalizada(meta) {
+    update(prev => ({ ...prev, metasPersonalizadas: [...(prev.metasPersonalizadas || []), { ...meta, id: Date.now() }] }));
+  }
+
+  function updateMetaPersonalizada(id, changes) {
+    update(prev => ({ ...prev, metasPersonalizadas: (prev.metasPersonalizadas || []).map(m => m.id === id ? { ...m, ...changes } : m) }));
+  }
+
+  function deleteMetaPersonalizada(id) {
+    update(prev => ({ ...prev, metasPersonalizadas: (prev.metasPersonalizadas || []).filter(m => m.id !== id) }));
+  }
+
   // Recuperar desde backup local
   function restoreFromBackup() {
     try {
@@ -699,8 +1005,19 @@ export function FinanzasProvider({ children }) {
     } catch { return false; }
   }
 
-  // Borra todos los datos financieros pero conserva la configuración
+  // Borra todos los datos financieros pero conserva categorías, cuentas y perfil
   function resetAll() {
+    // Marcar todas las migraciones/seeds como ejecutadas para que no vuelvan a correr
+    try {
+      const flags = [
+        'seed_local_2026_v1', 'nu_abril_2026_loaded', 'nu_marzo_2026_loaded',
+        'add_tarjeta_nu_v1', 'fix_ingresos_fijos_v1_done', 'seed_cierres_prueba_v1',
+      ];
+      flags.forEach(f => localStorage.setItem(f, '1'));
+      // Limpiar datos de inversiones e hábitos que viven en localStorage propio
+      ['inv_aportes', 'inv_portfolio', 'inv_precios', 'hab_habitos', 'hab_done'].forEach(k => localStorage.removeItem(k));
+    } catch {}
+
     update(prev => {
       const fresh = {
         ...prev,
@@ -708,11 +1025,16 @@ export function FinanzasProvider({ children }) {
         mercado:             [],
         presupuestos:        { ...EMPTY_PRESUPUESTOS },
         presupuestosDetalle: { ...EMPTY_DETALLE },
-        metas:      JSON.parse(JSON.stringify(DEFAULT_METAS)),
-        inversiones: JSON.parse(JSON.stringify(DEFAULT_INVERSIONES)),
-        habitos:       [],
-        habitosChecks: {},
-        habitosFrozen: {},
+        metas:               JSON.parse(JSON.stringify(DEFAULT_METAS)),
+        inversiones:         [],
+        habitos:             [],
+        habitosChecks:       {},
+        habitosFrozen:       {},
+        cierresMensuales:    {},
+        saldosIniciales:     {},
+        metasPersonalizadas: [],
+        tarjetas:            [],
+        plantilla:           {},
       };
       persistLocal(fresh);
       if (userRef.current) persistRemote(fresh, userRef.current.id);
@@ -735,6 +1057,10 @@ export function FinanzasProvider({ children }) {
       saveSaldoInicial,
       mesActivo, setMesActivo,
       resetAll, restoreFromBackup,
+      closeMonth, getCarryOver, getCierre, deleteCierre,
+      liquidarTC,
+      savePerfilIngresos, saveNombreUsuario,
+      addMetaPersonalizada, updateMetaPersonalizada, deleteMetaPersonalizada,
     }}>
       {children}
     </FinanzasContext.Provider>

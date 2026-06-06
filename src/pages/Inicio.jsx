@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Box, Typography } from '@mui/material'
 import { useFinanzas } from 'src/context/FinanzasContext'
 import { computeMetrics } from 'src/utils/metrics'
+import { computeDisponibleHoy, computePorCobrar, computeProximosPagos, computeAlertas } from 'src/utils/cashflow'
+import AlertasBanner from 'src/components/AlertasBanner'
 import { formatMoney, formatMoneyShort, getMesActual } from 'src/utils/format'
 import { CAT_ICONS, CAT_COLORS, MES_NAMES, MESES } from 'src/constants'
 
@@ -61,8 +63,9 @@ function SectionLabel({ children }) {
 
 export default function Inicio() {
   const navigate = useNavigate()
-  const { state, mesActivo, setMesActivo } = useFinanzas()
+  const { state, mesActivo, setMesActivo, closeMonth, getCarryOver, getCierre, deleteCierre } = useFinanzas()
   const [desglose, setDesglose] = useState(false)
+  const [confirmCierre, setConfirmCierre] = useState(false)
 
   const mes        = mesActivo
   const mesIdx     = parseInt(mes.replace('M', '')) - 1
@@ -77,9 +80,23 @@ export default function Inicio() {
   // Métricas
   const metrics  = useMemo(() => computeMetrics(state.transacciones || [], mes), [state.transacciones, mes])
   const presupMes = state.presupuestos?.[mes] || {}
-  const balance   = metrics.neto  // cash balance: ing - egCash (TC excluded)
+  const balance   = metrics.neto
   const positivo  = balance >= 0
   const balColor  = positivo ? GREEN : RED
+
+  // Saldo trasladado
+  const carryOver    = getCarryOver(mes)
+  const cierreMes    = getCierre(mes)
+  const hayCarryOver = carryOver > 0
+
+  // Flujo de caja real (después de carryOver para poder usarlo)
+  const disponibleHoy = useMemo(
+    () => computeDisponibleHoy(state.transacciones || [], mes, carryOver),
+    [state.transacciones, mes, carryOver]
+  )
+  const porCobrar     = useMemo(() => computePorCobrar(state.transacciones || []),                    [state.transacciones])
+  const proximosPagos = useMemo(() => computeProximosPagos(state.transacciones || []),                [state.transacciones])
+  const alertas       = useMemo(() => computeAlertas(state.transacciones || [], mes, carryOver),      [state.transacciones, mes, carryOver])
 
   const egFijoPres = Object.keys(presupMes).filter(k => state.categoriasEgresoFijo?.includes(k)).reduce((s, k) => s + (presupMes[k] || 0), 0)
   const egVarPres  = Object.keys(presupMes).filter(k => state.categoriasEgresoVariable?.includes(k)).reduce((s, k) => s + (presupMes[k] || 0), 0)
@@ -178,7 +195,7 @@ export default function Inicio() {
         {/* ── Header ── */}
         <Box sx={{ pt: 3, pb: 2 }}>
           <Typography sx={{ fontSize: 22, fontWeight: 600, color: T1, letterSpacing: '-0.3px', lineHeight: 1.2 }}>
-            {getGreeting()}, Dani
+            {getGreeting()}{state.nombreUsuario ? `, ${state.nombreUsuario}` : ''}
           </Typography>
           <Typography sx={{ fontSize: 13, color: T2, mt: 0.25 }}>
             {getFechaLarga()}
@@ -208,42 +225,38 @@ export default function Inicio() {
           })}
         </Box>
 
-        {/* ── Banner negativo ── */}
-        {bannerNeg && (
-          <Box sx={{ mb: 3, px: 1.5, py: 1, borderRadius: 1.5, bgcolor: '#FEF2F2', borderLeft: `3px solid ${RED}` }}>
-            <Typography sx={{ fontSize: 13, fontWeight: 500, color: '#991B1B', lineHeight: 1.3 }}>
-              Estás {formatMoney(Math.abs(balance))} sobre tu presupuesto este mes
-            </Typography>
-          </Box>
-        )}
+        {/* ── Alertas ── */}
+        <AlertasBanner alertas={alertas} />
 
-        {/* ── Tarjeta balance ── */}
-        <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 3 }}>
-          <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
-            Balance {mesNombre}
+        {/* ── Hero: Disponible HOY ── */}
+        <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 2 }}>
+          <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
+            Disponible hoy
           </Typography>
-          <Typography sx={{ fontSize: 36, fontWeight: 700, color: balColor, letterSpacing: '-1px', lineHeight: 1.05 }}>
-            {positivo ? '' : '−'}{formatMoney(Math.abs(balance))}
+          <Typography sx={{ fontSize: 38, fontWeight: 800, color: disponibleHoy >= 0 ? GREEN : RED, letterSpacing: '-1.5px', lineHeight: 1 }}>
+            {disponibleHoy >= 0 ? '' : '−'}{formatMoney(Math.abs(disponibleHoy))}
           </Typography>
-          {metrics.hasData && (
-            <Typography sx={{ fontSize: 13, color: T2, mt: 0.5, mb: 1.5 }}>
-              Ingresos {formatMoneyShort(metrics.ing)} · Gastos cash {formatMoneyShort(metrics.egCash)}{metrics.tcEg > 0 ? ` · TC pendiente ${formatMoneyShort(metrics.tcEg)}` : ''}
+          {hayCarryOver && (
+            <Typography sx={{ fontSize: 12, color: T2, mt: 0.4 }}>
+              Incluye {formatMoneyShort(carryOver)} del mes anterior
             </Typography>
           )}
-          <Box onClick={() => setDesglose(d => !d)} sx={{ display: 'inline-flex', cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
-            <Typography sx={{ fontSize: 13, fontWeight: 500, color: GREEN }}>
-              {desglose ? 'Ocultar detalle' : 'Ver detalle →'}
+
+          {/* Desglose colapsable */}
+          <Box onClick={() => setDesglose(d => !d)} sx={{ mt: 1.5, display: 'inline-flex', cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 500, color: T2 }}>
+              {desglose ? 'Ocultar detalle' : `Balance ${mesNombre} →`}
             </Typography>
           </Box>
 
-          {/* Desglose */}
           <Box sx={{ overflow: 'hidden', maxHeight: desglose ? 240 : 0, transition: 'max-height 0.3s ease' }}>
             <Box sx={{ pt: 1.75, mt: 1.5, borderTop: `1px solid #F0F0F0`, display: 'flex', flexDirection: 'column', gap: 1 }}>
               {[
-                { label: 'Egresos fijos',     real: metrics.fijos,      pres: egFijoPres },
-                { label: 'Egresos variables',  real: metrics.vars,       pres: egVarPres  },
-                { label: 'Ahorro',             real: metrics.ahorroReal, pres: 0          },
-                { label: 'Inversión',          real: metrics.invReal,    pres: 0          },
+                { label: 'Ingresos recibidos', real: metrics.ing,        pres: 0          },
+                { label: 'Egresos fijos',       real: metrics.fijos,     pres: egFijoPres },
+                { label: 'Egresos variables',   real: metrics.vars,      pres: egVarPres  },
+                { label: 'Ahorro',              real: metrics.ahorroReal,pres: 0          },
+                { label: 'Inversión',           real: metrics.invReal,   pres: 0          },
               ].filter(r => r.real > 0 || r.pres > 0).map(({ label, real, pres }) => (
                 <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                   <Typography sx={{ fontSize: 13, color: T2 }}>{label}</Typography>
@@ -253,15 +266,129 @@ export default function Inicio() {
                   </Box>
                 </Box>
               ))}
-              {metrics.tcEg > 0 && (
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <Typography sx={{ fontSize: 13, color: T2 }}>TC (pendiente de pago)</Typography>
-                  <Typography sx={{ fontSize: 14, fontWeight: 600, color: T2 }}>−{formatMoneyShort(metrics.tcEg)}</Typography>
+              {metrics.tcEg > 0 && (() => {
+                const txsMes = (state.transacciones || []).filter(t => t.mes === mes)
+                const tarjetasConCargos = [...new Set(
+                  txsMes.filter(t => t.cuenta === 'T.C' && t.movimiento === 'Egreso' && t.categoria !== 'Pago TC')
+                        .map(t => t.tarjeta || '(sin asignar)')
+                )]
+                if (tarjetasConCargos.length === 0) return null
+                return tarjetasConCargos.map(nombre => {
+                  const cargos  = txsMes.filter(t => t.cuenta === 'T.C' && t.movimiento === 'Egreso' && t.categoria !== 'Pago TC' && (t.tarjeta || '(sin asignar)') === nombre).reduce((s, t) => s + Math.abs(t.total), 0)
+                  const pagados = txsMes.filter(t => t.categoria === 'Pago TC' && t.movimiento === 'Egreso' && (t.tarjeta || '') === (nombre === '(sin asignar)' ? '' : nombre)).reduce((s, t) => s + Math.abs(t.total), 0)
+                  const pendiente = Math.max(0, cargos - pagados)
+                  return (
+                    <Box key={nombre} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                      <Typography sx={{ fontSize: 13, color: T2 }}>TC {nombre}</Typography>
+                      <Box sx={{ textAlign: 'right' }}>
+                        {pendiente > 0
+                          ? <Typography sx={{ fontSize: 14, fontWeight: 600, color: RED }}>−{formatMoneyShort(pendiente)}</Typography>
+                          : <Typography sx={{ fontSize: 13, fontWeight: 600, color: GREEN }}>Pagada ✓</Typography>
+                        }
+                        {pagados > 0 && (
+                          <Typography sx={{ fontSize: 11, color: T2 }}>
+                            {pendiente > 0 ? 'Pagado ' : ''}{formatMoneyShort(pagados)} de {formatMoneyShort(cargos)}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  )
+                })
+              })()}
+            </Box>
+          </Box>
+        </Box>
+
+        {/* ── Saldo Trasladado ── */}
+        {(hayCarryOver || metrics.hasData) && (
+          <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 3 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.75 }}>
+              Disponible {mesNombre}
+            </Typography>
+
+            {/* Saldo trasladado */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.25 }}>
+              <Box>
+                <Typography sx={{ fontSize: 13, color: T1, fontWeight: 500 }}>Saldo trasladado</Typography>
+                {hayCarryOver && (
+                  <Typography sx={{ fontSize: 11, color: T2, mt: 0.25 }}>
+                    💰 Dinero heredado de {MES_NAMES[parseInt(mes.replace('M','')) - 2] || 'mes anterior'}
+                  </Typography>
+                )}
+              </Box>
+              <Typography sx={{ fontSize: 15, fontWeight: 700, color: hayCarryOver ? GREEN : T2 }}>
+                {hayCarryOver ? formatMoney(carryOver) : '$ 0'}
+              </Typography>
+            </Box>
+
+            {/* Disponible total */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box>
+                <Typography sx={{ fontSize: 14, fontWeight: 700, color: T1 }}>Disponible total</Typography>
+                <Typography sx={{ fontSize: 11, color: T2, mt: 0.25 }}>Saldo heredado del mes anterior</Typography>
+              </Box>
+              <Typography sx={{ fontSize: 22, fontWeight: 800, color: hayCarryOver ? GREEN : T2, letterSpacing: '-0.5px' }}>
+                {formatMoney(carryOver)}
+              </Typography>
+            </Box>
+
+            {/* Cerrar mes / cierre existente */}
+            <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BORDER}` }}>
+              {cierreMes ? (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Box>
+                    <Typography sx={{ fontSize: 12, fontWeight: 600, color: GREEN }}>✓ Mes cerrado</Typography>
+                    <Typography sx={{ fontSize: 11, color: T2 }}>
+                      Traslada {formatMoneyShort(cierreMes.carry_over_amount)} al siguiente mes
+                    </Typography>
+                  </Box>
+                  <Typography
+                    onClick={() => deleteCierre(mes)}
+                    sx={{ fontSize: 11, color: T2, cursor: 'pointer', textDecoration: 'underline', '&:hover': { color: RED } }}
+                  >
+                    Reabrir
+                  </Typography>
+                </Box>
+              ) : (
+                <Box>
+                  {!confirmCierre ? (
+                    <Box
+                      onClick={() => setConfirmCierre(true)}
+                      sx={{ display: 'inline-flex', cursor: 'pointer', '&:active': { opacity: 0.7 } }}
+                    >
+                      <Typography sx={{ fontSize: 13, fontWeight: 500, color: T2 }}>
+                        Cerrar {mesNombre} →
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Typography sx={{ fontSize: 12, color: T1 }}>
+                        Balance: <strong style={{ color: balance >= 0 ? GREEN : RED }}>{formatMoney(balance)}</strong>
+                        {balance > 0
+                          ? ` → se trasladan ${formatMoney(balance)} a ${MES_NAMES[parseInt(mes.replace('M',''))] || 'siguiente mes'}`
+                          : ' → no se traslada nada (balance negativo)'}
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Box
+                          onClick={() => { closeMonth(mes); setConfirmCierre(false) }}
+                          sx={{ flex: 1, textAlign: 'center', py: 0.75, borderRadius: '8px', bgcolor: T1, cursor: 'pointer' }}
+                        >
+                          <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>Confirmar cierre</Typography>
+                        </Box>
+                        <Box
+                          onClick={() => setConfirmCierre(false)}
+                          sx={{ px: 2, py: 0.75, borderRadius: '8px', border: `1px solid ${BORDER}`, cursor: 'pointer' }}
+                        >
+                          <Typography sx={{ fontSize: 12, color: T2 }}>Cancelar</Typography>
+                        </Box>
+                      </Box>
+                    </Box>
+                  )}
                 </Box>
               )}
             </Box>
           </Box>
-        </Box>
+        )}
 
         {/* ── Flujo por cuenta ── */}
         {saldosCuenta.length > 0 && (
@@ -368,24 +495,6 @@ export default function Inicio() {
           </Box>
         )}
 
-        {/* ── Accesos rápidos ── */}
-        <Box sx={{ mb: 3 }}>
-          <SectionLabel>Accesos rápidos</SectionLabel>
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
-            {QUICK.map(({ icon, label, path }) => (
-              <Box key={path} onClick={() => navigate(path)} sx={{
-                bgcolor: CARD, borderRadius: '12px', boxShadow: CARD_SH,
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                gap: 0.5, py: 1.5, cursor: 'pointer',
-                '&:active': { opacity: 0.7 },
-              }}>
-                <Typography sx={{ fontSize: 22, lineHeight: 1 }}>{icon}</Typography>
-                <Typography sx={{ fontSize: 11, fontWeight: 500, color: T2, lineHeight: 1 }}>{label}</Typography>
-              </Box>
-            ))}
-          </Box>
-        </Box>
-
         {/* ── Estado del día ── */}
         <Box sx={{ mb: 3 }}>
           <SectionLabel>Hoy</SectionLabel>
@@ -418,8 +527,10 @@ export default function Inicio() {
           </Box>
         </Box>
 
-        {/* ── Últimos movimientos ── */}
-        <Box>
+        {/* ── ZONA 2: Últimos movimientos + Accesos rápidos ── */}
+
+        {/* Últimos movimientos */}
+        <Box sx={{ mb: 2.5 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.25 }}>
             <SectionLabel>Últimos movimientos</SectionLabel>
             {recientes.length > 0 && (
@@ -440,31 +551,25 @@ export default function Inicio() {
               </Box>
             </Box>
           ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.875 }}>
-              {recientes.map(tx => {
+            <Box sx={{ bgcolor: CARD, borderRadius: '12px', boxShadow: CARD_SH, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
+              {recientes.map((tx, i) => {
                 const esIngreso = tx.movimiento === 'Ingreso'
                 const catColor  = CAT_COLORS[tx.categoria] || '#919EAB'
                 const monto     = Math.abs(tx.total || tx.monto || 0)
                 return (
                   <Box key={tx.id} onClick={() => navigate('/historial')} sx={{
-                    bgcolor: CARD, borderRadius: '12px', boxShadow: CARD_SH,
                     display: 'flex', alignItems: 'center', gap: 1.5,
-                    px: 2, py: 1.5, cursor: 'pointer', '&:active': { opacity: 0.8 },
+                    px: 2, py: 1.375, cursor: 'pointer', '&:active': { opacity: 0.8 },
+                    borderBottom: i < recientes.length - 1 ? `1px solid ${BORDER}` : 'none',
                   }}>
-                    <Box sx={{
-                      width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-                      bgcolor: `${catColor}18`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
-                    }}>
+                    <Box sx={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, bgcolor: `${catColor}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
                       {CAT_ICONS[tx.categoria] || '💸'}
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography sx={{ fontSize: 14, fontWeight: 500, color: T1, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {tx.concepto || tx.categoria}
                       </Typography>
-                      <Typography sx={{ fontSize: 12, color: T2, mt: 0.15 }}>
-                        {relDate(tx.fecha)}
-                      </Typography>
+                      <Typography sx={{ fontSize: 12, color: T2, mt: 0.15 }}>{relDate(tx.fecha)}</Typography>
                     </Box>
                     <Typography sx={{ fontSize: 15, fontWeight: 600, color: esIngreso ? GREEN : T1, flexShrink: 0 }}>
                       {esIngreso ? '+' : '−'}{formatMoneyShort(monto)}
@@ -474,6 +579,23 @@ export default function Inicio() {
               })}
             </Box>
           )}
+        </Box>
+
+        {/* Accesos rápidos — scroll horizontal */}
+        <Box sx={{ mb: 3 }}>
+          <Box sx={{ display: 'flex', gap: 0, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, pb: 0.5, mx: '-20px', px: '20px' }}>
+            {QUICK.map(({ icon, label, path }) => (
+              <Box key={path} onClick={() => navigate(path)} sx={{
+                flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                gap: 0.5, px: 1.5, py: 1, cursor: 'pointer', '&:active': { opacity: 0.7 },
+              }}>
+                <Box sx={{ width: 44, height: 44, borderRadius: '12px', bgcolor: CARD, boxShadow: CARD_SH, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+                  {icon}
+                </Box>
+                <Typography sx={{ fontSize: 10, fontWeight: 500, color: T2, lineHeight: 1, mt: 0.25 }}>{label}</Typography>
+              </Box>
+            ))}
+          </Box>
         </Box>
 
       </Box>

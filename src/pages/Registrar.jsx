@@ -54,6 +54,41 @@ function SectionLabel({ children }) {
   );
 }
 
+function GroupSection({ label, gastado, presupuestado, color, defaultOpen = true, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const pct = presupuestado > 0 ? Math.min((gastado / presupuestado) * 100, 100) : 0;
+  const sobre = gastado > presupuestado && presupuestado > 0;
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Box onClick={() => setOpen(v => !v)} sx={{
+        display: 'flex', alignItems: 'center', gap: 1, mb: open ? 1 : 0,
+        cursor: 'pointer', userSelect: 'none', py: 0.75,
+      }}>
+        <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: color, flexShrink: 0 }} />
+        <Typography sx={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: T2, flex: 1 }}>
+          {label}
+        </Typography>
+        {presupuestado > 0 && (
+          <Typography sx={{ fontSize: 11, fontWeight: 600, color: sobre ? RED : T2 }}>
+            {fmtCOP(gastado)} / {fmtCOP(presupuestado)}
+          </Typography>
+        )}
+        <Box sx={{ color: T2, transition: 'transform 0.2s', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', display: 'flex', ml: 0.5 }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </Box>
+      </Box>
+      {presupuestado > 0 && (
+        <Box sx={{ height: 2, borderRadius: 2, bgcolor: '#F3F4F6', overflow: 'hidden', mb: open ? 1 : 0 }}>
+          <Box sx={{ height: '100%', width: `${pct}%`, bgcolor: sobre ? RED : color, borderRadius: 2, transition: 'width 0.4s' }} />
+        </Box>
+      )}
+      <Collapse in={open}>
+        {children}
+      </Collapse>
+    </Box>
+  );
+}
+
 // ── Selector de cuenta inline ──────────────────────────────
 function CuentaSelector({ state, cuenta, setCuenta, tarjeta, setTarjeta }) {
   const tarjetas = state.tarjetas || [];
@@ -131,20 +166,26 @@ function SimpleRow({ cat, presupuesto, pagado, esIngreso, onOpen }) {
 
 // ── Acordeón por categoría ────────────────────────────────
 // items=[] → muestra formulario libre; items=[...] → muestra sub-items
-function CategoryAccordion({ cat, items, presupuesto, pagadoCat, txById, esIngreso, onOpenItem, onPagarLibre }) {
+function CategoryAccordion({ cat, items, presupuesto, pagadoCat, txById, esIngreso, esVariable, onOpenItem, onPagarLibre }) {
   const [open, setOpen] = useState(false);
   const icon = CAT_ICONS[cat] || (esIngreso ? '💼' : '🔹');
 
   const tieneItems  = items && items.length > 0;
   const totalPres   = tieneItems ? items.reduce((s, i) => s + i.monto, 0) : (presupuesto || 0);
-  const totalPagado = tieneItems
-    ? items.reduce((s, i) => { if (!i.pagadoCon) return s; const tx = txById[i.txId]; return s + (tx ? Math.abs(tx.total) : i.monto); }, 0)
-    : (pagadoCat || 0);
-  const pct          = totalPres > 0 ? Math.min((totalPagado / totalPres) * 100, 100) : 0;
+  const totalPagado = esVariable
+    ? (pagadoCat || 0)
+    : tieneItems
+      ? items.reduce((s, i) => { if (!i.pagadoCon) return s; const tx = txById[i.txId]; return s + (tx ? Math.abs(tx.total) : i.monto); }, 0)
+      : (pagadoCat || 0);
+  // Variables: el denominador muestra lo real si supera el presupuesto
+  const totalDenom   = esVariable ? Math.max(totalPres, totalPagado) : totalPres;
+  const pct          = totalDenom > 0 ? Math.min((totalPagado / totalDenom) * 100, 100) : 0;
   const todosPagados = tieneItems ? items.every(i => i.pagadoCon) : (pagadoCat >= presupuesto && presupuesto > 0);
 
+  const sinMovimiento = totalPagado === 0;
+
   return (
-    <Box sx={{ borderRadius: '12px', bgcolor: CARD, boxShadow: CARD_SH, border: `1px solid ${open ? T1 : BORDER}`, overflow: 'hidden', mb: 0.875, transition: 'border-color 0.15s' }}>
+    <Box sx={{ borderRadius: '12px', bgcolor: CARD, boxShadow: CARD_SH, border: `1px solid ${open ? T1 : BORDER}`, overflow: 'hidden', mb: 0.875, transition: 'all 0.15s', opacity: sinMovimiento ? 0.5 : 1 }}>
       {/* Cabecera */}
       <Box onClick={() => setOpen(o => !o)} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.75, py: 1.375, cursor: 'pointer', '&:active': { opacity: 0.75 } }}>
         <Box sx={{ width: 36, height: 36, borderRadius: '9px', flexShrink: 0, bgcolor: todosPagados ? alpha(GREEN, 0.1) : open ? alpha(T1, 0.06) : '#F3F4F6', border: `1px solid ${todosPagados ? alpha(GREEN, 0.2) : BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
@@ -154,7 +195,7 @@ function CategoryAccordion({ cat, items, presupuesto, pagadoCat, txById, esIngre
           <Typography sx={{ fontSize: 14, fontWeight: 700, color: T1, lineHeight: 1.2 }}>{cat}</Typography>
           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', mt: 0.3 }}>
             <Typography sx={{ fontSize: 11, color: todosPagados ? GREEN : T2 }}>{fmtCOP(totalPagado)}</Typography>
-            <Typography sx={{ fontSize: 11, color: T2 }}>/ {fmtCOP(totalPres)}{tieneItems ? ` · ${items.length} items` : ''}</Typography>
+            <Typography sx={{ fontSize: 11, color: T2 }}>/ {fmtCOP(totalDenom)}{tieneItems ? ` · ${items.length} ${items.length === 1 ? 'ítem' : 'ítems'}` : ''}</Typography>
           </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', flexShrink: 0 }}>
@@ -374,10 +415,6 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
     return map;
   }, [txsMes]);
 
-  // Grupos: ingresos, fijos, variables
-  const fijos    = state.categoriasEgresoFijo.filter(c => presupMes[c] > 0);
-  const vars     = state.categoriasEgresoVariable.filter(c => presupMes[c] > 0);
-
   // Items de ingreso del presupuesto detallado
   const ingresosDetalle = useMemo(() => {
     const items = state.presupuestosDetalle?.[mes] || [];
@@ -412,6 +449,32 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
     });
     return map;
   }, [txsMes]);
+
+  // Grupos: fijos y variables ordenados por % gastado desc (más críticos primero)
+  const fijos = state.categoriasEgresoFijo
+    .filter(c => presupMes[c] > 0)
+    .sort((a, b) => {
+      const pctA = (pagadoPorCat[a] || 0) / presupMes[a];
+      const pctB = (pagadoPorCat[b] || 0) / presupMes[b];
+      return pctB - pctA;
+    });
+  const vars = state.categoriasEgresoVariable
+    .filter(c => presupMes[c] > 0)
+    .sort((a, b) => {
+      const pctA = (pagadoPorCat[a] || 0) / presupMes[a];
+      const pctB = (pagadoPorCat[b] || 0) / presupMes[b];
+      return pctB - pctA;
+    });
+
+  // Resumen del mes
+  const totalPresupuestado = [...fijos, ...vars].reduce((s, c) => s + (presupMes[c] || 0), 0);
+  const totalGastado       = [...fijos, ...vars].reduce((s, c) => s + (pagadoPorCat[c] || 0), 0);
+  const totalIngPresup     = state.categoriasIngreso.reduce((s, c) => s + (presupMes[c] || 0), 0);
+  const totalIngRecibido   = txsMes.filter(t => t.movimiento === 'Ingreso').reduce((s, t) => s + Math.abs(t.total), 0);
+  const balance            = totalIngRecibido - totalGastado;
+  // Caja: solo gastos que ya salieron de cuentas reales (excluye T.C)
+  const gastosCaja   = txsMes.filter(t => t.movimiento === 'Egreso' && t.cuenta !== 'T.C').reduce((s, t) => s + Math.abs(t.total), 0);
+  const balanceCaja  = totalIngRecibido - gastosCaja;
 
   const [payModal, setPayModal] = useState(null);
 
@@ -469,69 +532,127 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
         ))}
       </Box>
 
-      {/* ── Sección: Ingresos ── */}
-      <Box sx={{ mb: 2.5 }}>
-        <SectionLabel>Ingresos</SectionLabel>
-        {ingresosDetalle.length > 0 ? (
-          ingresosDetalle.map(item => (
-            <SimpleRow key={item.id}
-              cat={item.concepto || item.categoria}
-              presupuesto={item.monto}
-              pagado={ingresosRecibidos[item.concepto || item.categoria] || 0}
-              esIngreso={true}
-              onOpen={() => openPay({ cat: item.concepto || item.categoria, categoriaReal: item.categoria, presupuesto: item.monto, pagado: ingresosRecibidos[item.concepto || item.categoria] || 0, esIngreso: true, itemId: item.id, conceptoFijo: item.concepto || item.categoria })}
-            />
-          ))
-        ) : (
-          state.categoriasIngreso.map(cat => (
-            <SimpleRow key={cat}
-              cat={cat} presupuesto={presupMes[cat] || 0}
-              pagado={ingresosRecibidos[cat] || 0}
-              esIngreso={true}
-              onOpen={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: ingresosRecibidos[cat] || 0, esIngreso: true, conceptoFijo: cat })}
-            />
-          ))
-        )}
-        {ingresosDetalle.length === 0 && state.categoriasIngreso.length === 0 && (
-          <Typography sx={{ fontSize: 13, color: T2, py: 1 }}>Sin ingresos este mes</Typography>
-        )}
+      {/* ── Resumen del mes ── */}
+      {(totalPresupuestado > 0 || totalIngPresup > 0) && (
+        <Box sx={{ mb: 2.5, borderRadius: '14px', bgcolor: CARD, boxShadow: CARD_SH, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
+          {/* Fila 1: Ingresos / Gastos / Balance presupuestal */}
+          <Box sx={{ p: 1.5, pb: 1.25 }}>
+            <Typography sx={{ fontSize: 9, fontWeight: 700, color: T2, textTransform: 'uppercase', letterSpacing: '0.07em', mb: 1 }}>Presupuestal</Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, mb: 1.25 }}>
+              {[
+                { lbl: 'Ingresos', val: totalIngRecibido, meta: totalIngPresup, color: GREEN },
+                { lbl: 'Gastos', val: totalGastado, meta: totalPresupuestado, color: totalGastado > totalPresupuestado ? RED : T1 },
+                { lbl: 'Balance', val: balance, color: balance >= 0 ? GREEN : RED },
+              ].map(({ lbl, val, meta, color }) => (
+                <Box key={lbl} sx={{ textAlign: 'center' }}>
+                  <Typography sx={{ fontSize: 9, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.25 }}>{lbl}</Typography>
+                  <Typography sx={{ fontSize: 13, fontWeight: 800, color, fontFamily: 'monospace', lineHeight: 1 }}>
+                    {val < 0 ? '-' : ''}{fmtCOP(Math.abs(val))}
+                  </Typography>
+                  {meta != null && meta > 0 && (
+                    <Typography sx={{ fontSize: 9, color: T2, mt: 0.25 }}>de {fmtCOP(meta)}</Typography>
+                  )}
+                </Box>
+              ))}
+            </Box>
+            {totalPresupuestado > 0 && (
+              <Box sx={{ height: 3, borderRadius: 2, bgcolor: '#F3F4F6', overflow: 'hidden' }}>
+                <Box sx={{
+                  height: '100%', borderRadius: 2, transition: 'width 0.4s',
+                  width: `${Math.min((totalGastado / totalPresupuestado) * 100, 100)}%`,
+                  bgcolor: totalGastado > totalPresupuestado ? RED : totalGastado / totalPresupuestado > 0.8 ? '#D97706' : GREEN,
+                }} />
+              </Box>
+            )}
+          </Box>
+
+          {/* Divider */}
+          <Box sx={{ height: '1px', bgcolor: BORDER, mx: 1.5 }} />
+
+          {/* Fila 2: Balance de caja */}
+          <Box sx={{ p: 1.5, pt: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box>
+              <Typography sx={{ fontSize: 9, fontWeight: 700, color: T2, textTransform: 'uppercase', letterSpacing: '0.07em', mb: 0.25 }}>Caja disponible</Typography>
+              <Typography sx={{ fontSize: 9, color: T2 }}>Ingresos − gastos reales (sin T.C)</Typography>
+            </Box>
+            <Box sx={{ textAlign: 'right' }}>
+              <Typography sx={{ fontSize: 18, fontWeight: 800, color: balanceCaja >= 0 ? GREEN : RED, fontFamily: 'monospace', lineHeight: 1 }}>
+                {balanceCaja < 0 ? '-' : ''}{fmtCOP(Math.abs(balanceCaja))}
+              </Typography>
+              <Typography sx={{ fontSize: 9, color: T2, mt: 0.25 }}>
+                {fmtCOP(gastosCaja)} en cuentas reales
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      {/* ── Layout responsive: 1 col mobile / 2 col desktop ── */}
+      <Box sx={{ display: { xs: 'block', md: 'grid' }, gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
+
+        {/* Columna izquierda: Ingresos + Egresos fijos */}
+        <Box>
+          <GroupSection label="Ingresos" gastado={totalIngRecibido} presupuestado={totalIngPresup} color={GREEN} defaultOpen>
+            {ingresosDetalle.length > 0 ? (
+              ingresosDetalle.map(item => (
+                <SimpleRow key={item.id}
+                  cat={item.concepto || item.categoria}
+                  presupuesto={item.monto}
+                  pagado={ingresosRecibidos[item.concepto || item.categoria] || 0}
+                  esIngreso={true}
+                  onOpen={() => openPay({ cat: item.concepto || item.categoria, categoriaReal: item.categoria, presupuesto: item.monto, pagado: ingresosRecibidos[item.concepto || item.categoria] || 0, esIngreso: true, itemId: item.id, conceptoFijo: item.concepto || item.categoria })}
+                />
+              ))
+            ) : (
+              state.categoriasIngreso.map(cat => (
+                <SimpleRow key={cat}
+                  cat={cat} presupuesto={presupMes[cat] || 0}
+                  pagado={ingresosRecibidos[cat] || 0}
+                  esIngreso={true}
+                  onOpen={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: ingresosRecibidos[cat] || 0, esIngreso: true, conceptoFijo: cat })}
+                />
+              ))
+            )}
+          </GroupSection>
+
+          {hayFijos && (
+            <GroupSection label="Egresos fijos" gastado={fijos.reduce((s,c) => s+(pagadoPorCat[c]||0),0)} presupuestado={fijos.reduce((s,c) => s+(presupMes[c]||0),0)} color="#FFAB00" defaultOpen>
+              {fijos.map(cat => (
+                <CategoryAccordion key={cat}
+                  cat={cat}
+                  items={egresoDetallePorCat[cat] || []}
+                  presupuesto={presupMes[cat] || 0}
+                  pagadoCat={pagadoPorCat[cat] || 0}
+                  txById={txById} esIngreso={false}
+                  onOpenItem={(item, pagadoItem) => openPay({ cat: item.concepto, categoriaReal: cat, presupuesto: item.monto, pagado: pagadoItem, esIngreso: false, itemId: item.id, conceptoFijo: item.concepto })}
+                  onPagarLibre={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: pagadoPorCat[cat] || 0, esIngreso: false })}
+                />
+              ))}
+            </GroupSection>
+          )}
+        </Box>
+
+        {/* Columna derecha: Egresos variables */}
+        <Box>
+          {hayVars && (
+            <GroupSection label="Egresos variables" gastado={vars.reduce((s,c) => s+(pagadoPorCat[c]||0),0)} presupuestado={vars.reduce((s,c) => s+(presupMes[c]||0),0)} color="#FF5630" defaultOpen>
+              {vars.map(cat => (
+                <CategoryAccordion key={cat}
+                  cat={cat}
+                  esVariable={true}
+                  items={egresoDetallePorCat[cat] || []}
+                  presupuesto={presupMes[cat] || 0}
+                  pagadoCat={pagadoPorCat[cat] || 0}
+                  txById={txById} esIngreso={false}
+                  onOpenItem={(item, pagadoItem) => openPay({ cat: item.concepto, categoriaReal: cat, presupuesto: item.monto, pagado: pagadoItem, esIngreso: false, itemId: item.id, conceptoFijo: item.concepto })}
+                  onPagarLibre={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: pagadoPorCat[cat] || 0, esIngreso: false })}
+                />
+              ))}
+            </GroupSection>
+          )}
+        </Box>
+
       </Box>
-
-      {/* ── Sección: Egresos fijos ── */}
-      {hayFijos && (
-        <Box sx={{ mb: 2.5 }}>
-          <SectionLabel>Egresos fijos</SectionLabel>
-          {fijos.map(cat => (
-            <CategoryAccordion key={cat}
-              cat={cat}
-              items={egresoDetallePorCat[cat] || []}
-              presupuesto={presupMes[cat] || 0}
-              pagadoCat={pagadoPorCat[cat] || 0}
-              txById={txById} esIngreso={false}
-              onOpenItem={(item, pagadoItem) => openPay({ cat: item.concepto, categoriaReal: cat, presupuesto: item.monto, pagado: pagadoItem, esIngreso: false, itemId: item.id, conceptoFijo: item.concepto })}
-              onPagarLibre={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: pagadoPorCat[cat] || 0, esIngreso: false })}
-            />
-          ))}
-        </Box>
-      )}
-
-      {/* ── Sección: Egresos variables ── */}
-      {hayVars && (
-        <Box sx={{ mb: 2.5 }}>
-          <SectionLabel>Egresos variables</SectionLabel>
-          {vars.map(cat => (
-            <CategoryAccordion key={cat}
-              cat={cat}
-              items={egresoDetallePorCat[cat] || []}
-              presupuesto={presupMes[cat] || 0}
-              pagadoCat={pagadoPorCat[cat] || 0}
-              txById={txById} esIngreso={false}
-              onOpenItem={(item, pagadoItem) => openPay({ cat: item.concepto, categoriaReal: cat, presupuesto: item.monto, pagado: pagadoItem, esIngreso: false, itemId: item.id, conceptoFijo: item.concepto })}
-              onPagarLibre={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: pagadoPorCat[cat] || 0, esIngreso: false })}
-            />
-          ))}
-        </Box>
-      )}
 
       {!hayFijos && !hayVars && (
         <Box sx={{ py: 3, textAlign: 'center' }}>
@@ -565,6 +686,8 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
   const [montoPago,   setMontoPago]   = useState('');
   const [vozPreview,  setVozPreview]  = useState('');
   const [escuchando,  setEscuchando]  = useState(false);
+  const [esFuturo,    setEsFuturo]    = useState(false);
+  const [clienteRef,  setClienteRef]  = useState('');
   const recognitionRef = useRef(null);
   const tarjetas = state.tarjetas || [];
 
@@ -614,6 +737,7 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
     setMonto(''); setCategoria(''); setCatSearch(''); setConcepto(''); setCuenta('');
     setTarjeta(''); setTipoMov('Variable'); setPagoParcial(false); setMontoPago('');
     setVozPreview(''); setAutoSug(false); setFecha(todayStr());
+    setEsFuturo(false); setClienteRef('');
   }
 
   function guardar(overrides = {}) {
@@ -645,6 +769,9 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
       total: montoFinal, pago: pagoVal, saldo: montoFinal - pagoVal,
       cuenta: cuentaFinal || '',
       ...(tarjetaFinal ? { tarjeta: tarjetaFinal } : {}),
+      estado: esFuturo ? 'pendiente' : 'realizado',
+      esFuturo: esFuturo || false,
+      ...(clienteRef.trim() ? { clienteRef: clienteRef.trim() } : {}),
     });
 
     const presupuestoMes = state.presupuestos[mesVal] || {};
@@ -692,6 +819,40 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
 
   return (
     <Box sx={{ pb: 12 }}>
+
+      {/* ── Ya ocurrió / Programado ── */}
+      <Box sx={{ px: '20px', mb: 1.5 }}>
+        <Box sx={{ display: 'flex', gap: 0, p: '3px', borderRadius: '10px', bgcolor: '#EBEBEB' }}>
+          {[
+            { val: false, label: 'Ya ocurrió' },
+            { val: true,  label: 'Programado' },
+          ].map(({ val, label }) => (
+            <Box key={label} onClick={() => {
+              setEsFuturo(val);
+              if (val && fecha <= todayStr()) {
+                const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+                setFecha(tomorrow.toISOString().split('T')[0]);
+              }
+              if (!val) setFecha(todayStr());
+            }} sx={{
+              flex: 1, py: 0.75, borderRadius: '8px', textAlign: 'center',
+              fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+              bgcolor: esFuturo === val ? '#fff' : 'transparent',
+              color:   esFuturo === val ? (val ? '#6366F1' : T1) : T2,
+              boxShadow: esFuturo === val ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+            }}>
+              {val ? '📅 ' : ''}{label}
+            </Box>
+          ))}
+        </Box>
+        {esFuturo && (
+          <Box sx={{ mt: 0.75, px: 1, py: 0.625, borderRadius: '8px', bgcolor: '#EEF2FF', border: '1px solid #C7D2FE' }}>
+            <Typography sx={{ fontSize: 11, color: '#4338CA', fontWeight: 500 }}>
+              Se registra como pendiente · aparece en Flujo de Caja
+            </Typography>
+          </Box>
+        )}
+      </Box>
 
       {/* ── Egreso / Ingreso ── */}
       <Box sx={{ px: '20px', mb: 1.5 }}>
@@ -759,12 +920,26 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
 
       {/* ── Concepto ── */}
       <Box sx={{ px: '20px', mb: 1.5 }}>
-        <Label>Concepto</Label>
-        <Box component="input" type="text" placeholder="Ej: Vittoria, Internet, Netflix..." value={concepto}
+        <Label>{esFuturo && tipo === 'Ingreso' ? 'Descripción del cobro' : 'Concepto'}</Label>
+        <Box component="input" type="text"
+          placeholder={esFuturo && tipo === 'Ingreso' ? 'Ej: Sesión Juan, Proyecto web...' : 'Ej: Vittoria, Internet, Netflix...'}
+          value={concepto}
           onChange={e => handleConceptoChange(e.target.value)}
           sx={{ width: '100%', boxSizing: 'border-box', px: 1.5, py: 1, borderRadius: '10px', border: '1px solid', borderColor: concepto ? alpha(GREEN, 0.5) : BORDER, bgcolor: '#fff', fontSize: 14, fontFamily: 'inherit', color: T1, outline: 'none', transition: 'border-color 0.15s', '&:focus': { borderColor: GREEN } }}
         />
       </Box>
+
+      {/* ── Cliente (solo ingresos programados) ── */}
+      {esFuturo && tipo === 'Ingreso' && (
+        <Box sx={{ px: '20px', mb: 1.5 }}>
+          <Label>¿A quién cobrar? <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(opcional)</span></Label>
+          <Box component="input" type="text" placeholder="Ej: Juan Pérez, Empresa XYZ..."
+            value={clienteRef}
+            onChange={e => setClienteRef(e.target.value)}
+            sx={{ width: '100%', boxSizing: 'border-box', px: 1.5, py: 1, borderRadius: '10px', border: '1px solid', borderColor: clienteRef ? alpha('#6366F1', 0.5) : BORDER, bgcolor: '#fff', fontSize: 14, fontFamily: 'inherit', color: T1, outline: 'none', transition: 'border-color 0.15s', '&:focus': { borderColor: '#6366F1' } }}
+          />
+        </Box>
+      )}
 
       {/* ── Categorías ── */}
       <Box sx={{ px: '20px', mb: 1.5 }}>
@@ -895,7 +1070,7 @@ export default function Registrar() {
 
   return (
     <Box sx={{ bgcolor: BG, minHeight: '100%' }}>
-      <Box sx={{ maxWidth: 500, mx: 'auto' }}>
+      <Box sx={{ maxWidth: { xs: 500, md: 960 }, mx: 'auto' }}>
 
         {/* Header */}
         <Box sx={{ px: '20px', pt: 2.5, pb: 1.5 }}>

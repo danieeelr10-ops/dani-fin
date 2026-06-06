@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0f1117"/>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0a1f0a"/>
+      <stop offset="100%" stop-color="#061206"/>
+    </linearGradient>
+  </defs>
+  <!-- Chart bars -->
+  <rect x="100" y="300" width="60" height="140" rx="8" fill="#4ade80" opacity="0.5"/>
+  <rect x="190" y="220" width="60" height="220" rx="8" fill="#4ade80" opacity="0.7"/>
+  <rect x="280" y="160" width="60" height="280" rx="8" fill="#4ade80" opacity="0.9"/>
+  <rect x="370" y="100" width="60" height="340" rx="8" fill="#4ade80"/>
+  <!-- Trend line -->
+  <polyline points="130,290 220,210 310,150 400,90" fill="none" stroke="#4ade80" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+  <!-- Arrow up -->
+  <polyline points="370,90 400,60 430,90" fill="none" stroke="#4ade80" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- D letter -->
+  <text x="90" y="90" font-family="system-ui, -apple-system, sans-serif" font-size="80" font-weight="900" fill="#4ade80" opacity="0.9">DF</text>
+</svg>
