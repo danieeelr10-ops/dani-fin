@@ -97,6 +97,16 @@ function persistBackup(state) {
 
 const IS_DEV = import.meta.env.DEV;
 
+// Canal broadcast por usuario — señal de "datos actualizados"
+let _broadcastChannel = null;
+function getBroadcastChannel(userId) {
+  if (!_broadcastChannel) {
+    _broadcastChannel = supabase.channel(`sync:${userId}`);
+    _broadcastChannel.subscribe();
+  }
+  return _broadcastChannel;
+}
+
 async function persistRemote(state, userId) {
   if (IS_DEV) return; // Dev: nunca escribir a Supabase de producción
   try {
@@ -105,6 +115,12 @@ async function persistRemote(state, userId) {
       data: state,
       updated_at: new Date().toISOString(),
     });
+    // Señal a otros dispositivos del mismo usuario para que hagan fetch inmediato
+    getBroadcastChannel(userId).send({
+      type: 'broadcast',
+      event: 'sync',
+      payload: { ts: state.lastModified },
+    }).catch(() => {});
   } catch (e) {
     console.warn('Supabase sync error:', e);
   }
@@ -644,39 +660,30 @@ export function FinanzasProvider({ children }) {
       } catch {}
     }
 
-    // Polling cada 15 segundos — detecta cambios de otros dispositivos
-    const pollInterval = setInterval(fetchAndSync, 15000);
+    // ── Canal broadcast: recibe señal cuando otro dispositivo guarda ──
+    // No requiere configuración en el dashboard de Supabase.
+    // Flujo: PC guarda → envía señal → móvil recibe → hace fetch → setState
+    const broadcastChannel = supabase
+      .channel(`sync:${user.id}`)
+      .on('broadcast', { event: 'sync' }, () => {
+        fetchAndSync(); // Fetch inmediato al recibir señal
+      })
+      .subscribe();
 
-    // Al volver al foco (mobile background, cambio de pestaña) → sync inmediato
+    // ── Polling de respaldo cada 30 segundos ──
+    // Cubre casos donde el broadcast no llegó (websocket caído, etc.)
+    const pollInterval = setInterval(fetchAndSync, 30000);
+
+    // ── Al volver al foco: sync inmediato ──
     function handleVisibilityChange() {
       if (document.visibilityState === 'visible') fetchAndSync();
     }
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Suscripción en tiempo real (funciona si Realtime está habilitado en Supabase)
-    const channel = supabase
-      .channel(`user_data:${user.id}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'user_data',
-        filter: `user_id=eq.${user.id}`,
-      }, payload => {
-        const incoming = payload.new?.data;
-        if (!incoming) return;
-        const loaded  = mergeWithDefaults(incoming);
-        const current = loadFromStorage();
-        if ((loaded.lastModified || 0) > (current.lastModified || 0)) {
-          setState(loaded);
-          persistLocal(loaded);
-        }
-      })
-      .subscribe();
-
     return () => {
+      supabase.removeChannel(broadcastChannel);
       clearInterval(pollInterval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      supabase.removeChannel(channel);
     };
   }, [user?.id]);
 
