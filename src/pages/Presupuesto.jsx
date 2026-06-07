@@ -332,6 +332,35 @@ function EditSheet({ cat, budget, actual, catItems, tarjetas = [], onSave, onAdd
                     onKeyDown={e => e.key === 'Enter' && confirmarItem()}
                     sx={{ flex: 1, px: 1, py: 0.625, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: '#fff', fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', '&:focus': { borderColor: GREEN } }}
                   />
+                </Box>
+                {/* Selector TC en modo sin ítems */}
+                {tarjetas.length > 0 ? (
+                  <Box sx={{ display: 'flex', gap: 0.625, mt: 0.875, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <Typography sx={{ fontSize: 11, color: T2, flexShrink: 0 }}>TC:</Typography>
+                    {tarjetas.map(t => (
+                      <Box key={t.id} onClick={() => setNTarjeta(prev => prev === t.nombre ? '' : t.nombre)} sx={{
+                        px: 1, py: 0.3, borderRadius: '20px', fontSize: 11, fontWeight: 600, cursor: 'pointer', border: '1px solid',
+                        borderColor: nTarjeta === t.nombre ? '#6366F1' : BORDER,
+                        bgcolor: nTarjeta === t.nombre ? 'rgba(99,102,241,0.08)' : '#fff',
+                        color: nTarjeta === t.nombre ? '#6366F1' : T2,
+                        display: 'flex', alignItems: 'center', gap: 0.5,
+                      }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                        {t.nombre}
+                      </Box>
+                    ))}
+                    {nTarjeta && <Typography sx={{ fontSize: 10, color: '#6366F1', fontWeight: 600 }}>→ Se registra en TC</Typography>}
+                  </Box>
+                ) : (
+                  <Typography sx={{ fontSize: 11, color: T2, mt: 0.875 }}>
+                    ¿Cargo de TC? Configura tus tarjetas en la sección{' '}
+                    <Box component="span" sx={{ color: '#6366F1', fontWeight: 600, cursor: 'pointer' }}
+                      onClick={() => { onClose(); setTimeout(() => window.location.hash = '/tc', 100); }}>
+                      T.C →
+                    </Box>
+                  </Typography>
+                )}
+                <Box sx={{ display: 'flex', gap: 0.75, mt: 1, alignItems: 'center' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.375, px: 1, py: 0.625, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: '#fff' }}>
                     <Typography sx={{ fontSize: 12, color: T2 }}>$</Typography>
                     <Box component="input" type="text" inputMode="numeric" placeholder="0" value={nMonto}
