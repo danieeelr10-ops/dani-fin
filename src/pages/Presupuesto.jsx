@@ -120,16 +120,17 @@ function CatListSection({ cats, presupuestoMes, actualVals, isIngreso = false, o
 }
 
 // ── Bottom sheet: categoría con ítems + meta ──────────────
-function EditSheet({ cat, budget, actual, catItems, onSave, onAddItem, onDeleteItem, onClose }) {
-  const icon      = CAT_ICONS[cat] || '·';
-  const hayItems  = catItems.length > 0;
+function EditSheet({ cat, budget, actual, catItems, tarjetas = [], onSave, onAddItem, onDeleteItem, onClose }) {
+  const icon       = CAT_ICONS[cat] || '·';
+  const hayItems   = catItems.length > 0;
   const totalItems = catItems.reduce((s, i) => s + i.monto, 0);
 
   // Modo manual (sin ítems) — input de monto libre
-  const [val, setVal]         = useState(!hayItems && budget > 0 ? fmtInput(budget) : '');
+  const [val, setVal]             = useState(!hayItems && budget > 0 ? fmtInput(budget) : '');
   // Nuevo ítem
   const [nConcepto, setNConcepto] = useState('');
   const [nMonto,    setNMonto]    = useState('');
+  const [nTarjeta,  setNTarjeta]  = useState('');   // tarjeta TC opcional
   const [adding,    setAdding]    = useState(false);
   const inputRef  = useRef(null);
   const nConcRef  = useRef(null);
@@ -149,8 +150,8 @@ function EditSheet({ cat, budget, actual, catItems, onSave, onAddItem, onDeleteI
   function confirmarItem() {
     const m = parseInt(nMonto.replace(/\D/g, ''), 10);
     if (!nConcepto.trim() || !m) return;
-    onAddItem({ concepto: nConcepto.trim(), categoria: cat, monto: m });
-    setNConcepto(''); setNMonto('');
+    onAddItem({ concepto: nConcepto.trim(), categoria: cat, monto: m, tarjeta: nTarjeta || null });
+    setNConcepto(''); setNMonto(''); setNTarjeta('');
     setTimeout(() => nConcRef.current?.focus(), 50);
   }
 
@@ -225,7 +226,15 @@ function EditSheet({ cat, budget, actual, catItems, onSave, onAddItem, onDeleteI
                   display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.125,
                   borderBottom: i < catItems.length - 1 ? `1px solid ${BORDER}` : 'none',
                 }}>
-                  <Typography sx={{ flex: 1, fontSize: 13, fontWeight: 500, color: T1 }}>{item.concepto}</Typography>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 13, fontWeight: 500, color: T1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.concepto}</Typography>
+                    {item.tarjeta && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.2 }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6366F1" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                        <Typography sx={{ fontSize: 10, fontWeight: 600, color: '#6366F1' }}>{item.tarjeta}</Typography>
+                      </Box>
+                    )}
+                  </Box>
                   <Typography sx={{ fontSize: 13, fontWeight: 700, color: T1, flexShrink: 0 }}>{formatMoney(item.monto)}</Typography>
                   <Box onClick={() => onDeleteItem(item.id)} sx={{
                     width: 24, height: 24, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -238,28 +247,50 @@ function EditSheet({ cat, budget, actual, catItems, onSave, onAddItem, onDeleteI
 
               {/* Fila para agregar nuevo ítem */}
               {adding && (
-                <Box sx={{ display: 'flex', gap: 0.75, px: 1.5, py: 1, borderTop: `1px solid ${BORDER}`, alignItems: 'center', bgcolor: 'rgba(0,167,111,0.03)' }}>
-                  <Box component="input" ref={nConcRef} type="text" placeholder="Concepto..." value={nConcepto}
-                    onChange={e => setNConcepto(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && confirmarItem()}
-                    sx={{ flex: 1, px: 1, py: 0.625, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: '#fff', fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', '&:focus': { borderColor: GREEN } }}
-                  />
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.375, px: 1, py: 0.625, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: '#fff', flexShrink: 0 }}>
-                    <Typography sx={{ fontSize: 12, color: T2 }}>$</Typography>
-                    <Box component="input" type="text" inputMode="numeric" placeholder="0" value={nMonto}
-                      onChange={e => { const n = parseInt(e.target.value.replace(/\D/g,''),10); setNMonto(isNaN(n)?'':n.toLocaleString('es-CO')); }}
+                <Box sx={{ borderTop: `1px solid ${BORDER}`, bgcolor: 'rgba(0,167,111,0.03)' }}>
+                  <Box sx={{ display: 'flex', gap: 0.75, px: 1.5, pt: 1, pb: 0.625, alignItems: 'center' }}>
+                    <Box component="input" ref={nConcRef} type="text" placeholder="Concepto..." value={nConcepto}
+                      onChange={e => setNConcepto(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && confirmarItem()}
-                      sx={{ width: 80, bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', color: T1 }}
+                      sx={{ flex: 1, px: 1, py: 0.625, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: '#fff', fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', '&:focus': { borderColor: GREEN } }}
                     />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.375, px: 1, py: 0.625, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: '#fff', flexShrink: 0 }}>
+                      <Typography sx={{ fontSize: 12, color: T2 }}>$</Typography>
+                      <Box component="input" type="text" inputMode="numeric" placeholder="0" value={nMonto}
+                        onChange={e => { const n = parseInt(e.target.value.replace(/\D/g,''),10); setNMonto(isNaN(n)?'':n.toLocaleString('es-CO')); }}
+                        onKeyDown={e => e.key === 'Enter' && confirmarItem()}
+                        sx={{ width: 72, bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', color: T1 }}
+                      />
+                    </Box>
+                    <Box onClick={confirmarItem} sx={{
+                      width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
+                      bgcolor: nConcepto && nMonto ? GREEN : '#F3F4F6',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', '&:active': { opacity: 0.75 },
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={nConcepto && nMonto ? '#fff' : T2} strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    </Box>
                   </Box>
-                  <Box onClick={confirmarItem} sx={{
-                    width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
-                    bgcolor: nConcepto && nMonto ? GREEN : '#F3F4F6',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                    '&:active': { opacity: 0.75 },
-                  }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={nConcepto && nMonto ? '#fff' : T2} strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  </Box>
+                  {/* Selector de tarjeta TC (opcional) */}
+                  {tarjetas.length > 0 && (
+                    <Box sx={{ display: 'flex', gap: 0.625, px: 1.5, pb: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <Typography sx={{ fontSize: 11, color: T2, flexShrink: 0 }}>TC:</Typography>
+                      {tarjetas.map(t => (
+                        <Box key={t.id} onClick={() => setNTarjeta(prev => prev === t.nombre ? '' : t.nombre)} sx={{
+                          px: 1, py: 0.3, borderRadius: '20px', fontSize: 11, fontWeight: 600, cursor: 'pointer', border: '1px solid',
+                          borderColor: nTarjeta === t.nombre ? '#6366F1' : BORDER,
+                          bgcolor: nTarjeta === t.nombre ? 'rgba(99,102,241,0.08)' : '#fff',
+                          color: nTarjeta === t.nombre ? '#6366F1' : T2,
+                          display: 'flex', alignItems: 'center', gap: 0.5,
+                        }}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                          {t.nombre}
+                        </Box>
+                      ))}
+                      {nTarjeta && (
+                        <Typography sx={{ fontSize: 10, color: '#6366F1', fontWeight: 600 }}>→ Se registra en TC</Typography>
+                      )}
+                    </Box>
+                  )}
                 </Box>
               )}
             </Box>
@@ -416,7 +447,7 @@ function ProgresoTable({ rows, isIngreso = false }) {
 
 // ── Main ───────────────────────────────────────────────────
 export default function Presupuesto() {
-  const { state, savePresupuestoMes, copiarPresupuesto, savePlantilla, applyPlantilla, addPresupuestoItem, deletePresupuestoItem, updatePresupuestoItem, savePresupuestoTarjetas, pagarPresupuestoItem, despagarPresupuestoItem, deleteTransaccion, mesActivo, setMesActivo } = useFinanzas();
+  const { state, savePresupuestoMes, copiarPresupuesto, savePlantilla, applyPlantilla, addPresupuestoItem, deletePresupuestoItem, updatePresupuestoItem, savePresupuestoTarjetas, pagarPresupuestoItem, despagarPresupuestoItem, deleteTransaccion, addTransaccion, mesActivo, setMesActivo } = useFinanzas();
   const { showSnackbar } = useSnackbar();
   const mes = mesActivo;
   const setMes = setMesActivo;
@@ -589,8 +620,31 @@ export default function Presupuesto() {
             budget={editingBudget}
             actual={editingActual}
             catItems={editingItems}
+            tarjetas={state.tarjetas || []}
             onSave={handleSaveCat}
-            onAddItem={item => addPresupuestoItem(mes, item)}
+            onAddItem={item => {
+              // 1. Agrega al presupuesto
+              addPresupuestoItem(mes, item);
+              // 2. Si tiene tarjeta asignada, registra el cargo TC automáticamente
+              if (item.tarjeta) {
+                addTransaccion({
+                  id: Date.now(),
+                  fecha: new Date().toISOString(),
+                  mes,
+                  tipo: 'Fijo',
+                  movimiento: 'Egreso',
+                  categoria: item.categoria,
+                  concepto: item.concepto,
+                  total: -item.monto,
+                  pago:  -item.monto,
+                  saldo: 0,
+                  cuenta: 'T.C',
+                  tarjeta: item.tarjeta,
+                  estado: 'realizado',
+                  esFuturo: false,
+                });
+              }
+            }}
             onDeleteItem={id => deletePresupuestoItem(mes, id)}
             onClose={() => setEditingCat(null)}
           />
