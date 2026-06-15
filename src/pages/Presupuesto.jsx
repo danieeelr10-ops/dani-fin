@@ -476,7 +476,7 @@ function ProgresoTable({ rows, isIngreso = false }) {
 
 // ── Main ───────────────────────────────────────────────────
 export default function Presupuesto() {
-  const { state, savePresupuestoMes, copiarPresupuesto, savePlantilla, applyPlantilla, addPresupuestoItem, deletePresupuestoItem, updatePresupuestoItem, savePresupuestoTarjetas, pagarPresupuestoItem, despagarPresupuestoItem, deleteTransaccion, addTransaccion, mesActivo, setMesActivo } = useFinanzas();
+  const { state, savePresupuestoMes, copiarPresupuesto, savePlantilla, applyPlantilla, addPresupuestoItem, deletePresupuestoItem, updatePresupuestoItem, savePresupuestoTarjetas, pagarPresupuestoItem, despagarPresupuestoItem, deleteTransaccion, mesActivo, setMesActivo } = useFinanzas();
   const { showSnackbar } = useSnackbar();
   const mes = mesActivo;
   const setMes = setMesActivo;
@@ -652,27 +652,7 @@ export default function Presupuesto() {
             tarjetas={state.tarjetas || []}
             onSave={handleSaveCat}
             onAddItem={item => {
-              // 1. Agrega al presupuesto
               addPresupuestoItem(mes, item);
-              // 2. Si tiene tarjeta asignada, registra el cargo TC automáticamente
-              if (item.tarjeta) {
-                addTransaccion({
-                  id: Date.now(),
-                  fecha: new Date().toISOString(),
-                  mes,
-                  tipo: 'Fijo',
-                  movimiento: 'Egreso',
-                  categoria: item.categoria,
-                  concepto: item.concepto,
-                  total: -item.monto,
-                  pago:  -item.monto,
-                  saldo: 0,
-                  cuenta: 'T.C',
-                  tarjeta: item.tarjeta,
-                  estado: 'realizado',
-                  esFuturo: false,
-                });
-              }
             }}
             onDeleteItem={id => deletePresupuestoItem(mes, id)}
             onClose={() => setEditingCat(null)}

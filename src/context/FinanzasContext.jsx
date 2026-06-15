@@ -813,15 +813,21 @@ export function FinanzasProvider({ children }) {
       },
     }));
 
-  const addPresupuestoItem = (mes, { concepto, categoria, monto }) =>
+  const addPresupuestoItem = (mes, { concepto, categoria, monto, tarjeta }) =>
     update(prev => {
-      const item     = { id: Date.now(), concepto, categoria, monto };
+      const itemId  = Date.now();
+      const tcTxId  = tarjeta ? itemId + 1 : null;
+      const item    = { id: itemId, concepto, categoria, monto, ...(tarjeta ? { tarjeta, tcTxId } : {}) };
       const detalles = [...(prev.presupuestosDetalle[mes] || []), item];
       const mesData  = recalcPresupuestoFromDetalle(prev.presupuestos[mes] || {}, detalles);
+      const newTxs   = tarjeta
+        ? [{ id: tcTxId, concepto, total: -monto, pago: -monto, saldo: 0, categoria, movimiento: 'Egreso', tipo: 'Fijo', cuenta: 'T.C', tarjeta, estado: 'realizado', esFuturo: false, fecha: new Date().toISOString(), mes }, ...prev.transacciones]
+        : prev.transacciones;
       return {
         ...prev,
         presupuestosDetalle: { ...prev.presupuestosDetalle, [mes]: detalles },
         presupuestos:        { ...prev.presupuestos,        [mes]: mesData  },
+        transacciones:       newTxs,
       };
     });
 
@@ -830,9 +836,9 @@ export function FinanzasProvider({ children }) {
       const item     = (prev.presupuestosDetalle[mes] || []).find(d => d.id === id);
       const detalles = (prev.presupuestosDetalle[mes] || []).filter(d => d.id !== id);
       const mesData  = recalcPresupuestoFromDetalle(prev.presupuestos[mes] || {}, detalles);
-      // Si tenía transacción vinculada, la eliminamos también
-      const transacciones = item?.txId
-        ? prev.transacciones.filter(t => t.id !== item.txId)
+      const idsAEliminar = new Set([item?.txId, item?.tcTxId].filter(Boolean));
+      const transacciones = idsAEliminar.size > 0
+        ? prev.transacciones.filter(t => !idsAEliminar.has(t.id))
         : prev.transacciones;
       return {
         ...prev,

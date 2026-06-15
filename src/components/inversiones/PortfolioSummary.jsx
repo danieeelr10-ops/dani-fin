@@ -23,10 +23,11 @@ export default function PortfolioSummary({ portfolio, precios, trm, trmLoading, 
   const [newTicker, setNewTicker] = useState('')
   const [newShares, setNewShares] = useState('')
   const [newPrice,  setNewPrice]  = useState('')
+  const [newValor,  setNewValor]  = useState('')
 
   const [editPrecios, setEditPrecios] = useState(null)
   const [editTrm,     setEditTrm]     = useState('')
-  const [sharesEdit,  setSharesEdit]  = useState(null) // { ticker, val }
+  const [sharesEdit,  setSharesEdit]  = useState(null) // { ticker, shares, valorUSD }
   const [confirmDel,  setConfirmDel]  = useState(null)
 
   const totalUSD       = portfolio.reduce((s, p) => s + p.shares * (precios[p.ticker] || 0), 0)
@@ -38,10 +39,13 @@ export default function PortfolioSummary({ portfolio, precios, trm, trmLoading, 
   function handleAddSubmit() {
     const t = newTicker.trim().toUpperCase()
     const s = parseFloat(newShares) || 0
+    const v = parseFloat(newValor)  || 0
     const p = parseFloat(newPrice)  || 0
     if (!t) return
-    onAddPosition(t, s, p)
-    setNewTicker(''); setNewShares(''); setNewPrice('')
+    // Precio actual: si ingresó valor total y acciones, calcula precio por acción
+    const precioActual = (v > 0 && s > 0) ? v / s : p
+    onAddPosition(t, s, p || precioActual, precioActual)
+    setNewTicker(''); setNewShares(''); setNewPrice(''); setNewValor('')
     setShowAdd(false)
   }
 
@@ -60,7 +64,9 @@ export default function PortfolioSummary({ portfolio, precios, trm, trmLoading, 
   }
 
   function saveShares() {
-    onUpdateShares(sharesEdit.ticker, parseFloat(sharesEdit.val) || 0)
+    const s = parseFloat(sharesEdit.shares) || 0
+    const v = parseFloat(sharesEdit.valorUSD) || 0
+    onUpdateShares(sharesEdit.ticker, s, v > 0 && s > 0 ? v / s : null)
     setSharesEdit(null)
   }
 
@@ -129,7 +135,7 @@ export default function PortfolioSummary({ portfolio, precios, trm, trmLoading, 
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.25 }}>
                     <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}>
                       <Typography sx={{ fontSize: 11, color: T2 }}>{p.shares.toFixed(5)} acc · ${fmt(precio)}</Typography>
-                      <Box component="span" onClick={() => setSharesEdit({ ticker: p.ticker, val: String(p.shares) })}
+                      <Box component="span" onClick={() => setSharesEdit({ ticker: p.ticker, shares: String(p.shares), valorUSD: String(fmt(p.shares * precio)) })}
                         sx={{ fontSize: 10, color: GREEN, cursor: 'pointer', fontWeight: 700 }}>editar</Box>
                     </Box>
                     <Box sx={{ textAlign: 'right' }}>
@@ -181,22 +187,36 @@ export default function PortfolioSummary({ portfolio, precios, trm, trmLoading, 
               onChange={e => setNewTicker(e.target.value.toUpperCase())}
               sx={{ width: '100%', boxSizing: 'border-box', px: 1.5, py: 0.875, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: BG, fontSize: 14, fontWeight: 700, fontFamily: 'inherit', color: T1, outline: 'none', '&:focus': { borderColor: GREEN }, letterSpacing: '0.05em' }} />
           </Box>
-          <Box sx={{ display: 'flex', gap: 1, mb: 1.5 }}>
+          <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
             <Box sx={{ flex: 1 }}>
               <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>Acciones</Typography>
-              <Box component="input" type="number" placeholder="0.00" value={newShares}
+              <Box component="input" type="number" placeholder="0.52667" value={newShares}
                 onChange={e => setNewShares(e.target.value)}
                 sx={{ width: '100%', boxSizing: 'border-box', px: 1.5, py: 0.875, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: BG, fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', '&:focus': { borderColor: GREEN } }} />
             </Box>
             <Box sx={{ flex: 1 }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>Precio compra (USD)</Typography>
-              <Box component="input" type="number" placeholder="0.00" value={newPrice}
-                onChange={e => setNewPrice(e.target.value)}
+              <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>Valor actual (USD)</Typography>
+              <Box component="input" type="number" placeholder="105.55" value={newValor}
+                onChange={e => setNewValor(e.target.value)}
                 sx={{ width: '100%', boxSizing: 'border-box', px: 1.5, py: 0.875, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: BG, fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', '&:focus': { borderColor: GREEN } }} />
             </Box>
           </Box>
+          {/* Preview del precio por acción calculado */}
+          {parseFloat(newShares) > 0 && parseFloat(newValor) > 0 && (
+            <Box sx={{ mb: 1, px: 1.25, py: 0.625, borderRadius: '8px', bgcolor: 'rgba(0,167,111,0.06)', border: '1px solid rgba(0,167,111,0.18)' }}>
+              <Typography sx={{ fontSize: 11, color: GREEN, fontWeight: 600 }}>
+                Precio actual calculado: ${fmt(parseFloat(newValor) / parseFloat(newShares))} / acción
+              </Typography>
+            </Box>
+          )}
+          <Box sx={{ mb: 1.5 }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>Precio de compra promedio (USD/acción) <span style={{ fontWeight: 400, opacity: 0.6 }}>— opcional</span></Typography>
+            <Box component="input" type="number" placeholder="0.00" value={newPrice}
+              onChange={e => setNewPrice(e.target.value)}
+              sx={{ width: '100%', boxSizing: 'border-box', px: 1.5, py: 0.875, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: BG, fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', '&:focus': { borderColor: GREEN } }} />
+          </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Box component="button" onClick={() => { setShowAdd(false); setNewTicker(''); setNewShares(''); setNewPrice('') }}
+            <Box component="button" onClick={() => { setShowAdd(false); setNewTicker(''); setNewShares(''); setNewPrice(''); setNewValor('') }}
               sx={{ flex: 1, py: 0.875, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: 'transparent', color: T2, fontWeight: 600, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>
               Cancelar
             </Box>
@@ -243,10 +263,26 @@ export default function PortfolioSummary({ portfolio, precios, trm, trmLoading, 
       {sharesEdit && (
         <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'rgba(0,0,0,0.4)', zIndex: 1300, display: 'flex', alignItems: 'flex-end' }}>
           <Box sx={{ width: '100%', bgcolor: '#fff', borderRadius: '20px 20px 0 0', p: 2.5 }}>
-            <Typography sx={{ fontSize: 16, fontWeight: 700, color: T1, mb: 1.5 }}>Acciones de {sharesEdit.ticker}</Typography>
-            <Typography sx={{ fontSize: 12, color: T2, mb: 1 }}>Número de acciones (fraccionadas)</Typography>
-            <Box component="input" type="number" value={sharesEdit.val} onChange={e => setSharesEdit(s => ({ ...s, val: e.target.value }))}
-              sx={{ width: '100%', boxSizing: 'border-box', px: 1.5, py: 0.875, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: BG, fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', '&:focus': { borderColor: GREEN }, mb: 2 }} />
+            <Typography sx={{ fontSize: 16, fontWeight: 700, color: T1, mb: 1.5 }}>Editar {sharesEdit.ticker}</Typography>
+            <Box sx={{ display: 'flex', gap: 1, mb: 1.5 }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>Acciones</Typography>
+                <Box component="input" type="number" value={sharesEdit.shares} onChange={e => setSharesEdit(s => ({ ...s, shares: e.target.value }))}
+                  sx={{ width: '100%', boxSizing: 'border-box', px: 1.5, py: 0.875, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: BG, fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', '&:focus': { borderColor: GREEN } }} />
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>Valor actual (USD)</Typography>
+                <Box component="input" type="number" value={sharesEdit.valorUSD} onChange={e => setSharesEdit(s => ({ ...s, valorUSD: e.target.value }))}
+                  sx={{ width: '100%', boxSizing: 'border-box', px: 1.5, py: 0.875, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: BG, fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', '&:focus': { borderColor: GREEN } }} />
+              </Box>
+            </Box>
+            {parseFloat(sharesEdit.shares) > 0 && parseFloat(sharesEdit.valorUSD) > 0 && (
+              <Box sx={{ mb: 1.5, px: 1.25, py: 0.625, borderRadius: '8px', bgcolor: 'rgba(0,167,111,0.06)', border: '1px solid rgba(0,167,111,0.18)' }}>
+                <Typography sx={{ fontSize: 11, color: GREEN, fontWeight: 600 }}>
+                  Precio calculado: ${fmt(parseFloat(sharesEdit.valorUSD) / parseFloat(sharesEdit.shares))} / acción
+                </Typography>
+              </Box>
+            )}
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Box component="button" onClick={() => setSharesEdit(null)}
                 sx={{ flex: 1, py: 1, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: 'transparent', color: T2, fontWeight: 600, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>

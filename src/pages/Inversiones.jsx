@@ -108,20 +108,26 @@ export default function Inversiones() {
     setTrm(newTrm); save('inv_trm', newTrm)
   }
 
-  function handleUpdateShares(ticker, shares) {
+  function handleUpdateShares(ticker, shares, precioActual) {
     const next = portfolio.map(p => p.ticker === ticker ? { ...p, shares } : p)
     setPortfolio(next); save('inv_portfolio', next)
+    if (precioActual) {
+      const newPrecios = { ...precios, [ticker]: precioActual }
+      setPrecios(newPrecios); save('inv_precios', newPrecios)
+    }
   }
 
-  function handleAddPosition(ticker, shares, avgPrice) {
+  function handleAddPosition(ticker, shares, avgPrice, precioActual) {
     const t = ticker.toUpperCase().trim()
     if (!t || portfolio.some(p => p.ticker === t)) return
     const next = [...portfolio, { ticker: t, shares, avgPrice }]
     setPortfolio(next); save('inv_portfolio', next)
-    const newPrecios = { ...precios, [t]: avgPrice || 0 }
+    // Si se pasó un precio actual explícito úsalo; si no, usar avgPrice como fallback
+    const precio = precioActual || avgPrice || 0
+    const newPrecios = { ...precios, [t]: precio }
     setPrecios(newPrecios); save('inv_precios', newPrecios)
-    // Forzar re-fetch de precios para incluir el nuevo ticker
-    setPreciosFecha(null); save('inv_precios_date', null)
+    // Si no había precio actual explícito, forzar re-fetch
+    if (!precioActual) { setPreciosFecha(null); save('inv_precios_date', null) }
   }
 
   function handleDeletePosition(ticker) {
