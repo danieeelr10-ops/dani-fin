@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Box, Typography, alpha } from '@mui/material';
+import { Box, Typography, alpha, TextField, InputAdornment } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useFinanzas } from 'src/context/FinanzasContext';
 import { useSnackbar } from 'src/context/SnackbarContext';
@@ -37,9 +37,64 @@ function DiaChip({ dias }) {
   return <Typography sx={{ fontSize: 11, color: T2, fontWeight: 500 }}>+{dias}d</Typography>;
 }
 
+function EditModal({ tx, onSave, onClose }) {
+  const monto = Math.abs(tx.total) - (tx.montoPagado || 0);
+  const [concepto, setConcepto]   = useState(tx.concepto || '');
+  const [cliente, setCliente]     = useState(tx.clienteRef || '');
+  const [importe, setImporte]     = useState(String(monto));
+  const [fecha, setFecha]         = useState((tx.fechaVencimiento || tx.fecha || '').slice(0, 10));
+
+  function handleSave() {
+    const parsed = parseFloat(importe.replace(',', '.'));
+    if (!parsed || parsed <= 0) return;
+    onSave({ concepto, clienteRef: cliente, total: parsed, fechaVencimiento: fecha || tx.fechaVencimiento });
+  }
+
+  return (
+    <Box sx={{ position: 'fixed', inset: 0, zIndex: 1300, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+      <Box onClick={onClose} sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.4)' }} />
+      <Box sx={{ position: 'relative', bgcolor: '#fff', borderRadius: '20px 20px 0 0', p: 3, pb: 4 }}>
+        <Box sx={{ width: 36, height: 4, bgcolor: '#E5E7EB', borderRadius: 2, mx: 'auto', mb: 2.5 }} />
+        <Typography sx={{ fontSize: 16, fontWeight: 700, color: T1, mb: 2.5 }}>Editar cobro</Typography>
+
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+          <TextField
+            label="Concepto" size="small" fullWidth
+            value={concepto} onChange={e => setConcepto(e.target.value)}
+          />
+          <TextField
+            label="Cliente / referencia" size="small" fullWidth
+            value={cliente} onChange={e => setCliente(e.target.value)}
+          />
+          <TextField
+            label="Monto" size="small" fullWidth
+            value={importe} onChange={e => setImporte(e.target.value)}
+            InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+            inputProps={{ inputMode: 'decimal' }}
+          />
+          <TextField
+            label="Fecha de vencimiento" size="small" fullWidth type="date"
+            value={fecha} onChange={e => setFecha(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+        </Box>
+
+        <Box sx={{ display: 'flex', gap: 1.5, mt: 3 }}>
+          <Box onClick={onClose} sx={{ flex: 1, py: 1.25, borderRadius: '10px', border: `1px solid ${BORDER}`, textAlign: 'center', cursor: 'pointer' }}>
+            <Typography sx={{ fontSize: 14, fontWeight: 600, color: T2 }}>Cancelar</Typography>
+          </Box>
+          <Box onClick={handleSave} sx={{ flex: 1, py: 1.25, borderRadius: '10px', bgcolor: GREEN, textAlign: 'center', cursor: 'pointer' }}>
+            <Typography sx={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Guardar</Typography>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
 export default function Cobros() {
   const navigate = useNavigate();
-  const { state, updateTransaccion } = useFinanzas();
+  const { state, updateTransaccion, deleteTransaccion } = useFinanzas();
   const { showToast } = useSnackbar();
   const mes = getMesActual();
   const txs = state.transacciones || [];
@@ -64,7 +119,9 @@ export default function Cobros() {
     t.categoria !== 'Pago TC'
   ).sort((a, b) => new Date(b.fecha) - new Date(a.fecha)), [txs, mes]);
 
-  const [confirmando, setConfirmando] = useState(null);
+  const [confirmando, setConfirmando]   = useState(null);
+  const [eliminando, setEliminando]     = useState(null);
+  const [editando, setEditando]         = useState(null);
 
   function marcarRecibido(tx) {
     updateTransaccion(tx.id, {
@@ -77,9 +134,22 @@ export default function Cobros() {
     setConfirmando(null);
   }
 
+  function confirmarEliminar(tx) {
+    deleteTransaccion(tx.id);
+    showToast(`${tx.concepto || tx.categoria} eliminado`, 'success');
+    setEliminando(null);
+  }
+
+  function guardarEdicion(tx, changes) {
+    updateTransaccion(tx.id, changes);
+    showToast('Cobro actualizado', 'success');
+    setEditando(null);
+  }
+
   const mesNombre = MES_NAMES[MESES.indexOf(mes)];
 
   return (
+    <>
     <Box sx={{ bgcolor: BG, minHeight: '100%', pb: 6 }}>
       <Box sx={{ maxWidth: 600, mx: 'auto', px: '20px' }}>
 
@@ -222,31 +292,51 @@ export default function Cobros() {
                       </Box>
                     </Box>
 
-                    {/* Acción: marcar como recibido */}
-                    {!isConf ? (
-                      <Box sx={{ px: 2, pb: 1.25 }}>
-                        <Box onClick={() => setConfirmando(t.id)} sx={{
-                          display: 'inline-flex', px: 1.5, py: 0.5, borderRadius: '8px',
-                          border: `1px solid ${alpha(GREEN, 0.35)}`, bgcolor: alpha(GREEN, 0.06),
-                          cursor: 'pointer', '&:active': { opacity: 0.7 },
-                        }}>
-                          <Typography sx={{ fontSize: 12, fontWeight: 600, color: GREEN }}>Marcar como recibido</Typography>
+                    {/* Acciones */}
+                    {eliminando === t.id ? (
+                      <Box sx={{ px: 2, pb: 1.25, display: 'flex', gap: 1, alignItems: 'center' }}>
+                        <Typography sx={{ fontSize: 12, color: T2, flex: 1 }}>¿Eliminar este cobro?</Typography>
+                        <Box onClick={() => confirmarEliminar(t)} sx={{ px: 1.5, py: 0.5, borderRadius: '8px', bgcolor: RED, cursor: 'pointer' }}>
+                          <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>Eliminar</Typography>
+                        </Box>
+                        <Box onClick={() => setEliminando(null)} sx={{ px: 1.25, py: 0.5, borderRadius: '8px', border: `1px solid ${BORDER}`, cursor: 'pointer' }}>
+                          <Typography sx={{ fontSize: 12, color: T2 }}>No</Typography>
                         </Box>
                       </Box>
-                    ) : (
+                    ) : isConf ? (
                       <Box sx={{ px: 2, pb: 1.25, display: 'flex', gap: 1, alignItems: 'center' }}>
                         <Typography sx={{ fontSize: 12, color: T2, flex: 1 }}>
                           ¿Recibiste {formatMoneyShort(monto)}?
                         </Typography>
-                        <Box onClick={() => marcarRecibido(t)} sx={{
-                          px: 1.5, py: 0.5, borderRadius: '8px', bgcolor: GREEN, cursor: 'pointer', '&:active': { opacity: 0.8 },
-                        }}>
+                        <Box onClick={() => marcarRecibido(t)} sx={{ px: 1.5, py: 0.5, borderRadius: '8px', bgcolor: GREEN, cursor: 'pointer', '&:active': { opacity: 0.8 } }}>
                           <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>Sí, recibido</Typography>
                         </Box>
-                        <Box onClick={() => setConfirmando(null)} sx={{
-                          px: 1.25, py: 0.5, borderRadius: '8px', border: `1px solid ${BORDER}`, cursor: 'pointer',
-                        }}>
+                        <Box onClick={() => setConfirmando(null)} sx={{ px: 1.25, py: 0.5, borderRadius: '8px', border: `1px solid ${BORDER}`, cursor: 'pointer' }}>
                           <Typography sx={{ fontSize: 12, color: T2 }}>No</Typography>
+                        </Box>
+                      </Box>
+                    ) : (
+                      <Box sx={{ px: 2, pb: 1.25, display: 'flex', gap: 1, alignItems: 'center' }}>
+                        <Box onClick={() => setConfirmando(t.id)} sx={{
+                          flex: 1, px: 1.5, py: 0.5, borderRadius: '8px',
+                          border: `1px solid ${alpha(GREEN, 0.35)}`, bgcolor: alpha(GREEN, 0.06),
+                          cursor: 'pointer', '&:active': { opacity: 0.7 }, textAlign: 'center',
+                        }}>
+                          <Typography sx={{ fontSize: 12, fontWeight: 600, color: GREEN }}>✓ Recibido</Typography>
+                        </Box>
+                        <Box onClick={() => setEditando(t)} sx={{
+                          px: 1.25, py: 0.5, borderRadius: '8px',
+                          border: `1px solid ${BORDER}`, bgcolor: '#F9FAFB',
+                          cursor: 'pointer', '&:active': { opacity: 0.7 },
+                        }}>
+                          <Typography sx={{ fontSize: 12, color: T2 }}>✏️</Typography>
+                        </Box>
+                        <Box onClick={() => setEliminando(t.id)} sx={{
+                          px: 1.25, py: 0.5, borderRadius: '8px',
+                          border: `1px solid ${alpha(RED, 0.3)}`, bgcolor: alpha(RED, 0.04),
+                          cursor: 'pointer', '&:active': { opacity: 0.7 },
+                        }}>
+                          <Typography sx={{ fontSize: 12, color: RED }}>🗑️</Typography>
                         </Box>
                       </Box>
                     )}
@@ -265,20 +355,36 @@ export default function Cobros() {
             </Typography>
             <Box sx={{ bgcolor: CARD, borderRadius: '12px', boxShadow: CARD_SH, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
               {cobrosRecibidos.map((t, i) => (
-                <Box key={t.id} sx={{
-                  display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.25,
-                  borderBottom: i < cobrosRecibidos.length - 1 ? `1px solid ${BORDER}` : 'none',
-                }}>
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: GREEN, flexShrink: 0 }} />
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: T1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {t.concepto || t.categoria}
+                <Box key={t.id} sx={{ borderBottom: i < cobrosRecibidos.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.25 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: GREEN, flexShrink: 0 }} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontSize: 13, fontWeight: 600, color: T1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {t.concepto || t.categoria}
+                      </Typography>
+                      {t.clienteRef && <Typography sx={{ fontSize: 11, color: INDIGO }}>{t.clienteRef}</Typography>}
+                    </Box>
+                    <Typography sx={{ fontSize: 14, fontWeight: 700, color: GREEN, flexShrink: 0 }}>
+                      +{formatMoneyShort(Math.abs(t.total))}
                     </Typography>
-                    {t.clienteRef && <Typography sx={{ fontSize: 11, color: INDIGO }}>{t.clienteRef}</Typography>}
+                    <Box onClick={() => setEditando(t)} sx={{ ml: 0.5, px: 1, py: 0.5, borderRadius: '7px', border: `1px solid ${BORDER}`, bgcolor: '#F9FAFB', cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
+                      <Typography sx={{ fontSize: 11, color: T2 }}>✏️</Typography>
+                    </Box>
+                    <Box onClick={() => setEliminando(t.id)} sx={{ px: 1, py: 0.5, borderRadius: '7px', border: `1px solid ${alpha(RED, 0.3)}`, bgcolor: alpha(RED, 0.04), cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
+                      <Typography sx={{ fontSize: 11, color: RED }}>🗑️</Typography>
+                    </Box>
                   </Box>
-                  <Typography sx={{ fontSize: 14, fontWeight: 700, color: GREEN, flexShrink: 0 }}>
-                    +{formatMoneyShort(Math.abs(t.total))}
-                  </Typography>
+                  {eliminando === t.id && (
+                    <Box sx={{ px: 2, pb: 1, display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <Typography sx={{ fontSize: 12, color: T2, flex: 1 }}>¿Eliminar este cobro?</Typography>
+                      <Box onClick={() => confirmarEliminar(t)} sx={{ px: 1.5, py: 0.5, borderRadius: '8px', bgcolor: RED, cursor: 'pointer' }}>
+                        <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>Eliminar</Typography>
+                      </Box>
+                      <Box onClick={() => setEliminando(null)} sx={{ px: 1.25, py: 0.5, borderRadius: '8px', border: `1px solid ${BORDER}`, cursor: 'pointer' }}>
+                        <Typography sx={{ fontSize: 12, color: T2 }}>No</Typography>
+                      </Box>
+                    </Box>
+                  )}
                 </Box>
               ))}
             </Box>
@@ -287,5 +393,14 @@ export default function Cobros() {
 
       </Box>
     </Box>
+
+    {editando && (
+      <EditModal
+        tx={editando}
+        onSave={(changes) => guardarEdicion(editando, changes)}
+        onClose={() => setEditando(null)}
+      />
+    )}
+    </>
   );
 }
