@@ -120,7 +120,7 @@ function CatListSection({ cats, presupuestoMes, actualVals, isIngreso = false, o
 }
 
 // ── Bottom sheet: categoría con ítems + meta ──────────────
-function EditSheet({ cat, budget, actual, catItems, tarjetas = [], onSave, onAddItem, onDeleteItem, onClose }) {
+function EditSheet({ cat, budget, actual, catItems, tarjetas = [], onSave, onAddItem, onDeleteItem, onUpdateItem, onClose }) {
   const icon       = CAT_ICONS[cat] || '·';
   const hayItems   = catItems.length > 0;
   const totalItems = catItems.reduce((s, i) => s + i.monto, 0);
@@ -132,8 +132,25 @@ function EditSheet({ cat, budget, actual, catItems, tarjetas = [], onSave, onAdd
   const [nMonto,    setNMonto]    = useState('');
   const [nTarjeta,  setNTarjeta]  = useState('');   // tarjeta TC opcional
   const [adding,    setAdding]    = useState(false);
+  // Ítem en edición
+  const [editingId,       setEditingId]       = useState(null);
+  const [editConcepto,    setEditConcepto]     = useState('');
+  const [editMonto,       setEditMonto]        = useState('');
   const inputRef  = useRef(null);
   const nConcRef  = useRef(null);
+
+  function startEdit(item) {
+    setEditingId(item.id);
+    setEditConcepto(item.concepto);
+    setEditMonto(item.monto.toLocaleString('es-CO'));
+  }
+
+  function confirmEdit(item) {
+    const m = parseInt(editMonto.replace(/\D/g, ''), 10);
+    if (!editConcepto.trim() || !m) return;
+    onUpdateItem(item.id, { concepto: editConcepto.trim(), monto: m });
+    setEditingId(null);
+  }
 
   useEffect(() => {
     if (!hayItems) setTimeout(() => inputRef.current?.focus(), 150);
@@ -222,26 +239,52 @@ function EditSheet({ cat, budget, actual, catItems, tarjetas = [], onSave, onAdd
             {/* Lista de ítems */}
             <Box sx={{ bgcolor: '#F9FAFB', borderRadius: '10px', border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
               {catItems.map((item, i) => (
-                <Box key={item.id} sx={{
-                  display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.125,
-                  borderBottom: i < catItems.length - 1 ? `1px solid ${BORDER}` : 'none',
-                }}>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontSize: 13, fontWeight: 500, color: T1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.concepto}</Typography>
-                    {item.tarjeta && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.2 }}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6366F1" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                        <Typography sx={{ fontSize: 10, fontWeight: 600, color: '#6366F1' }}>{item.tarjeta}</Typography>
+                <Box key={item.id} sx={{ borderBottom: i < catItems.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
+                  {editingId === item.id ? (
+                    /* ── Modo edición inline ── */
+                    <Box sx={{ display: 'flex', gap: 0.75, px: 1.5, py: 0.875, alignItems: 'center', bgcolor: 'rgba(0,167,111,0.03)' }}>
+                      <Box component="input" type="text" value={editConcepto}
+                        onChange={e => setEditConcepto(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && confirmEdit(item)}
+                        autoFocus
+                        sx={{ flex: 1, px: 1, py: 0.625, borderRadius: '8px', border: `1.5px solid ${GREEN}`, bgcolor: '#fff', fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none' }}
+                      />
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.375, px: 1, py: 0.625, borderRadius: '8px', border: `1.5px solid ${GREEN}`, bgcolor: '#fff', flexShrink: 0 }}>
+                        <Typography sx={{ fontSize: 12, color: T2 }}>$</Typography>
+                        <Box component="input" type="text" inputMode="numeric" value={editMonto}
+                          onChange={e => { const n = parseInt(e.target.value.replace(/\D/g,''),10); setEditMonto(isNaN(n)?'':n.toLocaleString('es-CO')); }}
+                          onKeyDown={e => e.key === 'Enter' && confirmEdit(item)}
+                          sx={{ width: 72, bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', color: T1 }}
+                        />
                       </Box>
-                    )}
-                  </Box>
-                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: T1, flexShrink: 0 }}>{formatMoney(item.monto)}</Typography>
-                  <Box onClick={() => onDeleteItem(item.id)} sx={{
-                    width: 24, height: 24, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', color: T2, flexShrink: 0, '&:active': { bgcolor: '#FEF2F2', color: '#DC2626' },
-                  }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                  </Box>
+                      <Box onClick={() => confirmEdit(item)} sx={{ width: 32, height: 32, borderRadius: '8px', flexShrink: 0, bgcolor: GREEN, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', '&:active': { opacity: 0.75 } }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      </Box>
+                      <Box onClick={() => setEditingId(null)} sx={{ width: 32, height: 32, borderRadius: '8px', flexShrink: 0, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T2} strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </Box>
+                    </Box>
+                  ) : (
+                    /* ── Vista normal ── */
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 1.125 }}>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontSize: 13, fontWeight: 500, color: T1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.concepto}</Typography>
+                        {item.tarjeta && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.2 }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6366F1" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                            <Typography sx={{ fontSize: 10, fontWeight: 600, color: '#6366F1' }}>{item.tarjeta}</Typography>
+                          </Box>
+                        )}
+                      </Box>
+                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: T1, flexShrink: 0 }}>{formatMoney(item.monto)}</Typography>
+                      <Box onClick={() => startEdit(item)} sx={{ width: 24, height: 24, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: T2, flexShrink: 0, '&:active': { bgcolor: 'rgba(0,167,111,0.1)', color: GREEN } }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </Box>
+                      <Box onClick={() => onDeleteItem(item.id)} sx={{ width: 24, height: 24, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: T2, flexShrink: 0, '&:active': { bgcolor: '#FEF2F2', color: '#DC2626' } }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </Box>
+                    </Box>
+                  )}
                 </Box>
               ))}
 
@@ -655,6 +698,7 @@ export default function Presupuesto() {
               addPresupuestoItem(mes, item);
             }}
             onDeleteItem={id => deletePresupuestoItem(mes, id)}
+            onUpdateItem={(id, changes) => updatePresupuestoItem(mes, id, changes)}
             onClose={() => setEditingCat(null)}
           />
         )}
