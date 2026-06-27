@@ -1334,8 +1334,8 @@ export default function Presupuesto() {
   // ── Render ─────────────────────────────────────────────────
   return (
     <Box sx={{ bgcolor: BG, minHeight: '100%', pb: 6 }}>
-    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 900, mx: 'auto' }}>
-      <Box sx={{ mb: 3, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+    <Box sx={{ maxWidth: 600, mx: 'auto', px: '20px' }}>
+      <Box sx={{ pt: 3, pb: 2, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography sx={{ fontSize: 22, fontWeight: 700, color: T1, letterSpacing: '-0.3px' }}>Presupuesto</Typography>
           <Typography sx={{ fontSize: 13, color: T2, mt: 0.25 }}>{MES_NAMES[MESES.indexOf(mes)]} 2026</Typography>
