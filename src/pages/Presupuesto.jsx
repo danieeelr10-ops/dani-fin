@@ -576,11 +576,13 @@ export default function Presupuesto() {
   // ── ConfigForm — lista limpia + bottom sheet ───────────────
   function ConfigForm() {
 
-    const totalFijo     = catFijo.reduce((s, c)     => s + (presupuestoMes[c] || 0), 0);
-    const totalVariable = catVariable.reduce((s, c) => s + (presupuestoMes[c] || 0), 0);
-    const totalIng      = catIngreso.reduce((s, c)  => s + (presupuestoMes[c] || 0), 0);
-    const totalEg       = Math.max(totalFijo + totalVariable, metrics.eg);
-    const margen        = totalIng - totalEg;
+    const totalFijo        = catFijo.reduce((s, c)     => s + (presupuestoMes[c] || 0), 0);
+    const totalVariable    = catVariable.reduce((s, c) => s + (presupuestoMes[c] || 0), 0);
+    const totalIngPlan     = catIngreso.reduce((s, c)  => s + (presupuestoMes[c] || 0), 0);
+    const totalIngReal     = catIngreso.reduce((s, c)  => s + (metrics.byIngresoCat[c] || 0), 0);
+    const totalIng         = Math.max(totalIngPlan, totalIngReal);
+    const totalEg          = Math.max(totalFijo + totalVariable, metrics.eg);
+    const margen           = totalIng - totalEg;
 
     function handleSaveCat(cat, newVal) {
       const next = { ...presupuestoMes, [cat]: newVal };
@@ -615,14 +617,14 @@ export default function Presupuesto() {
         {/* KPIs */}
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, mb: 2 }}>
           {[
-            { label: 'Egresos',  value: formatMoneyShort(totalEg),    color: '#DC2626' },
-            { label: 'Ingresos', value: formatMoneyShort(totalIng),   color: GREEN },
-            { label: 'Margen',   value: (margen >= 0 ? '' : '−') + formatMoneyShort(Math.abs(margen)),
-              color: margen >= 0 ? GREEN : '#DC2626' },
-          ].map(({ label, value, color }) => (
+            { label: 'Egresos',  value: formatMoneyShort(totalEg),  sub: totalEg > (totalFijo+totalVariable) ? `plan ${formatMoneyShort(totalFijo+totalVariable)}` : null, color: '#DC2626' },
+            { label: 'Ingresos', value: formatMoneyShort(totalIng), sub: totalIngReal > totalIngPlan ? `plan ${formatMoneyShort(totalIngPlan)}` : null, color: GREEN },
+            { label: 'Margen',   value: (margen >= 0 ? '' : '−') + formatMoneyShort(Math.abs(margen)), color: margen >= 0 ? GREEN : '#DC2626' },
+          ].map(({ label, value, sub, color }) => (
             <Box key={label} sx={{ p: 1.5, borderRadius: '12px', bgcolor: '#fff', border: `1px solid ${BORDER}`, boxShadow: CARD_SH }}>
               <Typography sx={{ fontSize: 10, color: T2, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.25 }}>{label}</Typography>
               <Typography sx={{ fontSize: 16, fontWeight: 800, color, lineHeight: 1.2 }}>{value}</Typography>
+              {sub && <Typography sx={{ fontSize: 9, color: T2, mt: 0.25 }}>{sub}</Typography>}
             </Box>
           ))}
         </Box>

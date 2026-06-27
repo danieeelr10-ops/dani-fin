@@ -470,7 +470,7 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
   const totalPresupuestado = [...fijos, ...vars].reduce((s, c) => s + (presupMes[c] || 0), 0);
   const totalGastado       = [...fijos, ...vars].reduce((s, c) => s + (pagadoPorCat[c] || 0), 0);
   const totalIngPresup     = state.categoriasIngreso.reduce((s, c) => s + (presupMes[c] || 0), 0);
-  const totalIngRecibido   = txsMes.filter(t => t.movimiento === 'Ingreso').reduce((s, t) => s + Math.abs(t.total), 0);
+  const totalIngRecibido   = txsMes.filter(t => t.movimiento === 'Ingreso' && t.categoria !== 'Pago TC').reduce((s, t) => s + Math.abs(t.total), 0);
   const balance            = totalIngRecibido - totalGastado;
   // Caja: solo gastos que ya salieron de cuentas reales (excluye T.C)
   const gastosCaja   = txsMes.filter(t => t.movimiento === 'Egreso' && t.cuenta !== 'T.C').reduce((s, t) => s + Math.abs(t.total), 0);
