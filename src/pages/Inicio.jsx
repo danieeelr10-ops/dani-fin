@@ -153,7 +153,7 @@ export default function Inicio() {
   const pctGastado = egPresPlan > 0 ? Math.min(metrics.eg / egPresPlan, 1) : 0
   const hayPresup  = ingPres > 0 || egPresPlan > 0
 
-  // Proyección fin de mes — conservadora: solo lo que ya tengo menos lo que falta pagar
+  // Proyección fin de mes: disponible hoy + ingresos pendientes de recibir − gastos que faltan pagar
   const ingresosPendientes = useMemo(() =>
     (state.transacciones || [])
       .filter(t => t.mes === mes && t.movimiento === 'Ingreso' && t.categoria !== 'Pago TC' && (t.estado === 'pendiente' || t.esFuturo))
@@ -161,7 +161,7 @@ export default function Inicio() {
     [state.transacciones, mes]
   )
   const gastosPendientes = Math.max(egPresPlan - metrics.eg, 0)
-  const proyeccionFinMes = disponibleHoy - gastosPendientes
+  const proyeccionFinMes = disponibleHoy + ingresosPendientes - gastosPendientes
   const proyColor = proyeccionFinMes < 0 ? RED : proyeccionFinMes < margenPlan * 0.8 ? '#F59E0B' : GREEN
   const difVsPlan = proyeccionFinMes - margenPlan
 
@@ -558,7 +558,8 @@ export default function Inicio() {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, borderTop: `1px solid ${BORDER}`, pt: 1.5 }}>
               {[
                 { label: 'Disponible hoy', value: disponibleHoy, sign: '' },
-                { label: '− Por pagar del presupuesto', value: gastosPendientes, sign: '−' },
+                { label: '+ Por recibir', value: ingresosPendientes, sign: '+' },
+                { label: '− Por pagar', value: gastosPendientes, sign: '−' },
               ].map(({ label, value, sign }) => (
                 <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Typography sx={{ fontSize: 12, color: T2 }}>{label}</Typography>
