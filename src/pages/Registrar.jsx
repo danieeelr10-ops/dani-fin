@@ -585,8 +585,8 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
         </Box>
       )}
 
-      {/* ── Layout responsive: 1 col mobile / 2 col desktop ── */}
-      <Box sx={{ display: { xs: 'block', md: 'grid' }, gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
+      {/* ── Layout 2 columnas en todas las vistas ── */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: { xs: '0 12px', md: '0 24px' } }}>
 
         {/* Columna izquierda: Ingresos + Egresos fijos */}
         <Box>
@@ -1069,7 +1069,7 @@ export default function Registrar() {
 
   return (
     <Box sx={{ bgcolor: BG, minHeight: '100%' }}>
-      <Box sx={{ maxWidth: { xs: 500, md: 960 }, mx: 'auto' }}>
+      <Box sx={{ maxWidth: 960, mx: 'auto' }}>
 
         {/* Header */}
         <Box sx={{ px: '20px', pt: 2.5, pb: 1.5 }}>
