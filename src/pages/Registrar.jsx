@@ -586,16 +586,16 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
         </Box>
       )}
 
-      {/* ── Mobile: tabs para alternar columnas ── */}
+      {/* ── Mobile: 3 tabs ── */}
       <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 1.5 }}>
         <Box sx={{ display: 'flex', p: '3px', borderRadius: '10px', bgcolor: '#EBEBEB' }}>
-          {[['izq', 'Ingresos & Fijos'], ['der', 'Variables']].map(([id, label]) => (
+          {[['ing', 'Ingresos'], ['fijos', 'Fijos'], ['vars', 'Variables']].map(([id, label]) => (
             <Box key={id} onClick={() => setColTab(id)} sx={{
               flex: 1, py: 0.75, borderRadius: '8px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.15s',
               bgcolor: colTab === id ? CARD : 'transparent',
               boxShadow: colTab === id ? CARD_SH : 'none',
             }}>
-              <Typography sx={{ fontSize: 13, fontWeight: colTab === id ? 700 : 500, color: colTab === id ? T1 : T2, lineHeight: 1 }}>
+              <Typography sx={{ fontSize: 12, fontWeight: colTab === id ? 700 : 500, color: colTab === id ? T1 : T2, lineHeight: 1 }}>
                 {label}
               </Typography>
             </Box>
@@ -603,54 +603,60 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
         </Box>
       </Box>
 
-      {/* ── Desktop: 2 columnas / Mobile: columna activa según tab ── */}
+      {/* ── Desktop: 2 columnas / Mobile: sección activa según tab ── */}
       <Box sx={{ display: { xs: 'block', md: 'grid' }, gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
 
-        {/* Columna izquierda: Ingresos + Egresos fijos */}
-        <Box sx={{ display: { xs: colTab === 'izq' ? 'block' : 'none', md: 'block' } }}>
-          <GroupSection label="Ingresos" gastado={totalIngRecibido} presupuestado={totalIngPresup} color={GREEN} defaultOpen>
-            {ingresosDetalle.length > 0 ? (
-              ingresosDetalle.map(item => (
-                <SimpleRow key={item.id}
-                  cat={item.concepto || item.categoria}
-                  presupuesto={item.monto}
-                  pagado={ingresosRecibidos[item.concepto || item.categoria] || 0}
-                  esIngreso={true}
-                  onOpen={() => openPay({ cat: item.concepto || item.categoria, categoriaReal: item.categoria, presupuesto: item.monto, pagado: ingresosRecibidos[item.concepto || item.categoria] || 0, esIngreso: true, itemId: item.id, conceptoFijo: item.concepto || item.categoria })}
-                  onMoverMes={() => moverItemAlSiguienteMes(item)}
-                />
-              ))
-            ) : (
-              state.categoriasIngreso.map(cat => (
-                <SimpleRow key={cat}
-                  cat={cat} presupuesto={presupMes[cat] || 0}
-                  pagado={ingresosRecibidos[cat] || 0}
-                  esIngreso={true}
-                  onOpen={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: ingresosRecibidos[cat] || 0, esIngreso: true, conceptoFijo: cat })}
-                />
-              ))
-            )}
-          </GroupSection>
-
-          {hayFijos && (
-            <GroupSection label="Egresos fijos" gastado={fijos.reduce((s,c) => s+(pagadoPorCat[c]||0),0)} presupuestado={fijos.reduce((s,c) => s+(presupMes[c]||0),0)} color="#FFAB00" defaultOpen>
-              {fijos.map(cat => (
-                <CategoryAccordion key={cat}
-                  cat={cat}
-                  items={egresoDetallePorCat[cat] || []}
-                  presupuesto={presupMes[cat] || 0}
-                  pagadoCat={pagadoPorCat[cat] || 0}
-                  txById={txById} esIngreso={false}
-                  onOpenItem={(item, pagadoItem) => openPay({ cat: item.concepto, categoriaReal: cat, presupuesto: item.monto, pagado: pagadoItem, esIngreso: false, itemId: item.id, conceptoFijo: item.concepto })}
-                  onPagarLibre={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: pagadoPorCat[cat] || 0, esIngreso: false })}
-                />
-              ))}
+        {/* Columna izquierda desktop / Ingresos + Fijos mobile */}
+        <Box sx={{ display: { xs: 'block', md: 'block' } }}>
+          {/* Ingresos */}
+          <Box sx={{ display: { xs: colTab === 'ing' ? 'block' : 'none', md: 'block' } }}>
+            <GroupSection label="Ingresos" gastado={totalIngRecibido} presupuestado={totalIngPresup} color={GREEN} defaultOpen>
+              {ingresosDetalle.length > 0 ? (
+                ingresosDetalle.map(item => (
+                  <SimpleRow key={item.id}
+                    cat={item.concepto || item.categoria}
+                    presupuesto={item.monto}
+                    pagado={ingresosRecibidos[item.concepto || item.categoria] || 0}
+                    esIngreso={true}
+                    onOpen={() => openPay({ cat: item.concepto || item.categoria, categoriaReal: item.categoria, presupuesto: item.monto, pagado: ingresosRecibidos[item.concepto || item.categoria] || 0, esIngreso: true, itemId: item.id, conceptoFijo: item.concepto || item.categoria })}
+                    onMoverMes={() => moverItemAlSiguienteMes(item)}
+                  />
+                ))
+              ) : (
+                state.categoriasIngreso.map(cat => (
+                  <SimpleRow key={cat}
+                    cat={cat} presupuesto={presupMes[cat] || 0}
+                    pagado={ingresosRecibidos[cat] || 0}
+                    esIngreso={true}
+                    onOpen={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: ingresosRecibidos[cat] || 0, esIngreso: true, conceptoFijo: cat })}
+                  />
+                ))
+              )}
             </GroupSection>
+          </Box>
+
+          {/* Egresos fijos */}
+          {hayFijos && (
+            <Box sx={{ display: { xs: colTab === 'fijos' ? 'block' : 'none', md: 'block' } }}>
+              <GroupSection label="Egresos fijos" gastado={fijos.reduce((s,c) => s+(pagadoPorCat[c]||0),0)} presupuestado={fijos.reduce((s,c) => s+(presupMes[c]||0),0)} color="#FFAB00" defaultOpen>
+                {fijos.map(cat => (
+                  <CategoryAccordion key={cat}
+                    cat={cat}
+                    items={egresoDetallePorCat[cat] || []}
+                    presupuesto={presupMes[cat] || 0}
+                    pagadoCat={pagadoPorCat[cat] || 0}
+                    txById={txById} esIngreso={false}
+                    onOpenItem={(item, pagadoItem) => openPay({ cat: item.concepto, categoriaReal: cat, presupuesto: item.monto, pagado: pagadoItem, esIngreso: false, itemId: item.id, conceptoFijo: item.concepto })}
+                    onPagarLibre={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: pagadoPorCat[cat] || 0, esIngreso: false })}
+                  />
+                ))}
+              </GroupSection>
+            </Box>
           )}
         </Box>
 
         {/* Columna derecha: Egresos variables */}
-        <Box sx={{ display: { xs: colTab === 'der' ? 'block' : 'none', md: 'block' } }}>
+        <Box sx={{ display: { xs: colTab === 'vars' ? 'block' : 'none', md: 'block' } }}>
           {hayVars && (
             <GroupSection label="Egresos variables" gastado={vars.reduce((s,c) => s+(pagadoPorCat[c]||0),0)} presupuestado={vars.reduce((s,c) => s+(presupMes[c]||0),0)} color="#FF5630" defaultOpen>
               {vars.map(cat => (
