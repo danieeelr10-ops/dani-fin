@@ -87,7 +87,18 @@ export default function Inicio() {
   // Saldo trasladado
   const carryOver    = getCarryOver(mes)
   const cierreMes    = getCierre(mes)
-  const hayCarryOver = carryOver > 0
+  const hayCarryOver = carryOver !== 0
+  const esDeuda      = carryOver < 0
+
+  // Cobros pendientes del mes activo (para mostrar en confirmación de cierre)
+  const pendingCobrosCount = useMemo(() =>
+    (state.transacciones || []).filter(t =>
+      t.mes === mes &&
+      t.movimiento === 'Ingreso' &&
+      (t.esFuturo === true || t.estado === 'pendiente' || t.estado === 'parcial')
+    ).length,
+    [state.transacciones, mes]
+  )
 
   // Flujo de caja real (después de carryOver para poder usarlo)
   const disponibleHoy = useMemo(
@@ -141,6 +152,18 @@ export default function Inicio() {
   const margenPlan = ingPres - egPresPlan  // plan puro: ingresos presupuestados - egresos presupuestados
   const pctGastado = egPresPlan > 0 ? Math.min(metrics.eg / egPresPlan, 1) : 0
   const hayPresup  = ingPres > 0 || egPresPlan > 0
+
+  // Proyección fin de mes
+  const ingresosPendientes = useMemo(() =>
+    (state.transacciones || [])
+      .filter(t => t.mes === mes && t.movimiento === 'Ingreso' && t.categoria !== 'Pago TC' && (t.estado === 'pendiente' || t.esFuturo))
+      .reduce((s, t) => s + Math.abs(t.total), 0),
+    [state.transacciones, mes]
+  )
+  const gastosPendientes = Math.max(egPresPlan - metrics.eg, 0)
+  const proyeccionFinMes = disponibleHoy + ingresosPendientes - gastosPendientes
+  const proyColor = proyeccionFinMes < 0 ? RED : proyeccionFinMes < margenPlan * 0.8 ? '#F59E0B' : GREEN
+  const difVsPlan = proyeccionFinMes - margenPlan
 
   // Flujo por cuenta en el mes activo
   const saldosCuenta = useMemo(() => {
@@ -309,26 +332,32 @@ export default function Inicio() {
             {/* Saldo trasladado */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.25 }}>
               <Box>
-                <Typography sx={{ fontSize: 13, color: T1, fontWeight: 500 }}>Saldo trasladado</Typography>
+                <Typography sx={{ fontSize: 13, color: T1, fontWeight: 500 }}>
+                  {esDeuda ? 'Deuda trasladada' : 'Saldo trasladado'}
+                </Typography>
                 {hayCarryOver && (
                   <Typography sx={{ fontSize: 11, color: T2, mt: 0.25 }}>
-                    💰 Dinero heredado de {MES_NAMES[parseInt(mes.replace('M','')) - 2] || 'mes anterior'}
+                    {esDeuda ? '🔴' : '💰'} {esDeuda ? 'Deuda heredada de' : 'Dinero heredado de'} {MES_NAMES[parseInt(mes.replace('M','')) - 2] || 'mes anterior'}
                   </Typography>
                 )}
               </Box>
-              <Typography sx={{ fontSize: 15, fontWeight: 700, color: hayCarryOver ? GREEN : T2 }}>
-                {hayCarryOver ? formatMoney(carryOver) : '$ 0'}
+              <Typography sx={{ fontSize: 15, fontWeight: 700, color: hayCarryOver ? (esDeuda ? RED : GREEN) : T2 }}>
+                {hayCarryOver ? formatMoney(Math.abs(carryOver)) : '$ 0'}
               </Typography>
             </Box>
 
             {/* Disponible total */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Box>
-                <Typography sx={{ fontSize: 14, fontWeight: 700, color: T1 }}>Disponible total</Typography>
-                <Typography sx={{ fontSize: 11, color: T2, mt: 0.25 }}>Saldo heredado del mes anterior</Typography>
+                <Typography sx={{ fontSize: 14, fontWeight: 700, color: T1 }}>
+                  {esDeuda ? 'Deuda pendiente' : 'Disponible total'}
+                </Typography>
+                <Typography sx={{ fontSize: 11, color: T2, mt: 0.25 }}>
+                  {esDeuda ? 'Deuda heredada del mes anterior' : 'Saldo heredado del mes anterior'}
+                </Typography>
               </Box>
-              <Typography sx={{ fontSize: 22, fontWeight: 800, color: hayCarryOver ? GREEN : T2, letterSpacing: '-0.5px' }}>
-                {formatMoney(carryOver)}
+              <Typography sx={{ fontSize: 22, fontWeight: 800, color: hayCarryOver ? (esDeuda ? RED : GREEN) : T2, letterSpacing: '-0.5px' }}>
+                {esDeuda ? '−' : ''}{formatMoney(Math.abs(carryOver))}
               </Typography>
             </Box>
 
@@ -339,7 +368,10 @@ export default function Inicio() {
                   <Box>
                     <Typography sx={{ fontSize: 12, fontWeight: 600, color: GREEN }}>✓ Mes cerrado</Typography>
                     <Typography sx={{ fontSize: 11, color: T2 }}>
-                      Traslada {formatMoneyShort(cierreMes.carry_over_amount)} al siguiente mes
+                      {cierreMes.carry_over_amount >= 0
+                        ? `Traslada ${formatMoneyShort(cierreMes.carry_over_amount)} al siguiente mes`
+                        : `Deuda de ${formatMoneyShort(Math.abs(cierreMes.carry_over_amount))} trasladada`}
+                      {cierreMes.cobros_moved > 0 && ` · ${cierreMes.cobros_moved} cobro${cierreMes.cobros_moved > 1 ? 's' : ''} pendiente${cierreMes.cobros_moved > 1 ? 's' : ''} movido${cierreMes.cobros_moved > 1 ? 's' : ''}`}
                     </Typography>
                   </Box>
                   <Typography
@@ -365,9 +397,14 @@ export default function Inicio() {
                       <Typography sx={{ fontSize: 12, color: T1 }}>
                         Balance: <strong style={{ color: balance >= 0 ? GREEN : RED }}>{formatMoney(balance)}</strong>
                         {balance > 0
-                          ? ` → se trasladan ${formatMoney(balance)} a ${MES_NAMES[parseInt(mes.replace('M',''))] || 'siguiente mes'}`
-                          : ' → no se traslada nada (balance negativo)'}
+                          ? ` → se trasladan ${formatMoney(balance)} como ahorro`
+                          : ` → se traslada deuda de ${formatMoney(Math.abs(balance))}`}
                       </Typography>
+                      {pendingCobrosCount > 0 && (
+                        <Typography sx={{ fontSize: 12, color: T1 }}>
+                          📋 <strong>{pendingCobrosCount} cobro{pendingCobrosCount > 1 ? 's' : ''} pendiente{pendingCobrosCount > 1 ? 's' : ''}</strong> → se mueven automáticamente a {MES_NAMES[parseInt(mes.replace('M',''))] || 'siguiente mes'}
+                        </Typography>
+                      )}
                       <Box sx={{ display: 'flex', gap: 1 }}>
                         <Box
                           onClick={() => { closeMonth(mes); setConfirmCierre(false) }}
@@ -492,6 +529,46 @@ export default function Inicio() {
                 </Box>
               )
             })()}
+          </Box>
+        )}
+
+        {/* ── Proyección fin de mes ── */}
+        {hayPresup && (
+          <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 3, border: `1px solid ${proyeccionFinMes < 0 ? '#FCA5A5' : proyeccionFinMes < margenPlan * 0.8 ? '#FDE68A' : BORDER}` }}>
+            <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1 }}>
+              Proyección fin de mes · {mesNombre}
+            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+              <Box>
+                <Typography sx={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1, color: proyColor }}>
+                  {proyeccionFinMes < 0 ? '−' : ''}{formatMoney(Math.abs(proyeccionFinMes))}
+                </Typography>
+                <Typography sx={{ fontSize: 12, color: T2, mt: 0.4 }}>
+                  {difVsPlan >= 0
+                    ? `${formatMoneyShort(difVsPlan)} más de lo planeado`
+                    : `${formatMoneyShort(Math.abs(difVsPlan))} menos de lo planeado`}
+                </Typography>
+              </Box>
+              <Box sx={{ px: 1.25, py: 0.5, borderRadius: '20px', bgcolor: proyeccionFinMes < 0 ? '#FEE2E2' : proyeccionFinMes < margenPlan * 0.8 ? '#FEF3C7' : '#DCFCE7' }}>
+                <Typography sx={{ fontSize: 11, fontWeight: 700, color: proyColor }}>
+                  {proyeccionFinMes < 0 ? '⚠ En rojo' : proyeccionFinMes < margenPlan * 0.8 ? '⚠ Ajustado' : '✓ En orden'}
+                </Typography>
+              </Box>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, borderTop: `1px solid ${BORDER}`, pt: 1.5 }}>
+              {[
+                { label: 'Disponible hoy', value: disponibleHoy, sign: '' },
+                { label: '+ Por cobrar', value: ingresosPendientes, sign: '+' },
+                { label: '− Por pagar', value: gastosPendientes, sign: '−' },
+              ].map(({ label, value, sign }) => (
+                <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography sx={{ fontSize: 12, color: T2 }}>{label}</Typography>
+                  <Typography sx={{ fontSize: 12, fontWeight: 600, color: T1, fontFamily: 'monospace' }}>
+                    {sign} {formatMoneyShort(Math.abs(value))}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
           </Box>
         )}
 
