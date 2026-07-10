@@ -25,6 +25,7 @@ function QuickCapture({ open, onClose }) {
   const [categoria, setCategoria] = useState('');
   const [cuenta,    setCuenta]    = useState('');
   const [fecha,     setFecha]     = useState('');
+  const [concepto,  setConcepto]  = useState('');
   const inputRef  = useRef(null);
   const dateRef   = useRef(null);
 
@@ -34,7 +35,7 @@ function QuickCapture({ open, onClose }) {
   useEffect(() => {
     if (open) {
       setTipo('Egreso'); setMonto(''); setCategoria(''); setCuenta('');
-      setFecha(todayStr());
+      setFecha(todayStr()); setConcepto('');
       setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [open]);
@@ -55,7 +56,7 @@ function QuickCapture({ open, onClose }) {
       fecha: new Date(fechaFinal + 'T12:00:00').toISOString(),
       mes,
       tipo: 'Variable', movimiento: tipo,
-      categoria, concepto: categoria,
+      categoria, concepto: concepto.trim() || categoria,
       total: tipo === 'Egreso' ? -val : val,
       pago:  tipo === 'Egreso' ? -val : val,
       saldo: 0,
@@ -129,6 +130,14 @@ function QuickCapture({ open, onClose }) {
             sx={{ flex: 1, bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: 36, fontWeight: 900, fontFamily: 'inherit', color: accentColor, letterSpacing: '-1px', '&::placeholder': { color: 'rgba(145,158,171,0.25)', fontWeight: 400, fontSize: 32 } }}
           />
           {monto && <Box onClick={() => setMonto('')} sx={{ color: QC_T2, cursor: 'pointer', fontSize: 20, lineHeight: 1, px: 0.5, flexShrink: 0 }}>×</Box>}
+        </Box>
+
+        {/* Concepto opcional */}
+        <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, py: 0.875, borderRadius: '12px', border: '1.5px solid', borderColor: concepto ? `${accentColor}40` : QC_BORDER, bgcolor: '#FAFAFA', mb: 1.25, transition: 'border-color 0.15s' }}>
+          <Box component="input" type="text" placeholder="Concepto (opcional)" value={concepto}
+            onChange={e => setConcepto(e.target.value)}
+            sx={{ flex: 1, bgcolor: 'transparent', border: 'none', outline: 'none', fontSize: 14, fontFamily: 'inherit', color: QC_T1, '&::placeholder': { color: 'rgba(145,158,171,0.5)' } }}
+          />
         </Box>
 
         {/* Categorías */}
