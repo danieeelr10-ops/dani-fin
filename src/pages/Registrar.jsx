@@ -412,6 +412,7 @@ function IngresoRecibido({ tx }) {
 // ── Tab: Mis pagos ─────────────────────────────────────────
 function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoItem, deletePresupuestoItem, showToast }) {
   const [mes, setMes] = useState(getMesActual());
+  const [colTab, setColTab] = useState('izq');
   const mesIdx = MESES.indexOf(mes);
 
   function moverItemAlSiguienteMes(item) {
@@ -585,11 +586,28 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
         </Box>
       )}
 
-      {/* ── Layout 2 columnas en todas las vistas ── */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: { xs: '0 12px', md: '0 24px' } }}>
+      {/* ── Mobile: tabs para alternar columnas ── */}
+      <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 1.5 }}>
+        <Box sx={{ display: 'flex', p: '3px', borderRadius: '10px', bgcolor: '#EBEBEB' }}>
+          {[['izq', 'Ingresos & Fijos'], ['der', 'Variables']].map(([id, label]) => (
+            <Box key={id} onClick={() => setColTab(id)} sx={{
+              flex: 1, py: 0.75, borderRadius: '8px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.15s',
+              bgcolor: colTab === id ? CARD : 'transparent',
+              boxShadow: colTab === id ? CARD_SH : 'none',
+            }}>
+              <Typography sx={{ fontSize: 13, fontWeight: colTab === id ? 700 : 500, color: colTab === id ? T1 : T2, lineHeight: 1 }}>
+                {label}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
+      {/* ── Desktop: 2 columnas / Mobile: columna activa según tab ── */}
+      <Box sx={{ display: { xs: 'block', md: 'grid' }, gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
 
         {/* Columna izquierda: Ingresos + Egresos fijos */}
-        <Box>
+        <Box sx={{ display: { xs: colTab === 'izq' ? 'block' : 'none', md: 'block' } }}>
           <GroupSection label="Ingresos" gastado={totalIngRecibido} presupuestado={totalIngPresup} color={GREEN} defaultOpen>
             {ingresosDetalle.length > 0 ? (
               ingresosDetalle.map(item => (
@@ -632,7 +650,7 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
         </Box>
 
         {/* Columna derecha: Egresos variables */}
-        <Box>
+        <Box sx={{ display: { xs: colTab === 'der' ? 'block' : 'none', md: 'block' } }}>
           {hayVars && (
             <GroupSection label="Egresos variables" gastado={vars.reduce((s,c) => s+(pagadoPorCat[c]||0),0)} presupuestado={vars.reduce((s,c) => s+(presupMes[c]||0),0)} color="#FF5630" defaultOpen>
               {vars.map(cat => (
