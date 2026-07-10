@@ -130,14 +130,15 @@ function CuentaSelector({ state, cuenta, setCuenta, tarjeta, setTarjeta }) {
 }
 
 // ── Fila simple (categoría sin detalle) ───────────────────
-function SimpleRow({ cat, presupuesto, pagado, esIngreso, onOpen }) {
+function SimpleRow({ cat, presupuesto, pagado, esIngreso, onOpen, onMoverMes }) {
   const pct         = presupuesto > 0 ? Math.min((pagado / presupuesto) * 100, 100) : 0;
   const pagadoTotal = pagado >= presupuesto && presupuesto > 0;
+  const sinPagar    = pagado === 0;
   const icon        = CAT_ICONS[cat] || (esIngreso ? '💼' : '🔹');
   return (
-    <Box onClick={() => !pagadoTotal && onOpen()}
-      sx={{ borderRadius: '12px', bgcolor: CARD, boxShadow: CARD_SH, border: `1px solid ${BORDER}`, overflow: 'hidden', mb: 0.875, cursor: pagadoTotal ? 'default' : 'pointer', '&:active': { opacity: pagadoTotal ? 1 : 0.75 } }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.75, py: 1.375 }}>
+    <Box sx={{ borderRadius: '12px', bgcolor: CARD, boxShadow: CARD_SH, border: `1px solid ${BORDER}`, overflow: 'hidden', mb: 0.875 }}>
+      <Box onClick={() => !pagadoTotal && onOpen()}
+        sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.75, py: 1.375, cursor: pagadoTotal ? 'default' : 'pointer', '&:active': { opacity: pagadoTotal ? 1 : 0.75 } }}>
         <Box sx={{ width: 36, height: 36, borderRadius: '9px', flexShrink: 0, bgcolor: pagadoTotal ? alpha(GREEN, 0.1) : '#F3F4F6', border: `1px solid ${pagadoTotal ? alpha(GREEN, 0.2) : BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
           {pagadoTotal ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg> : icon}
         </Box>
@@ -155,6 +156,17 @@ function SimpleRow({ cat, presupuesto, pagado, esIngreso, onOpen }) {
           : <Box sx={{ px: 1, py: 0.5, borderRadius: '8px', bgcolor: '#F3F4F6', border: `1px solid ${BORDER}` }}><Typography sx={{ fontSize: 11, fontWeight: 700, color: T2 }}>{esIngreso ? 'Recibir' : 'Pagar'}</Typography></Box>
         }
       </Box>
+      {/* Botón mover al siguiente mes — solo ingresos pendientes sin pago */}
+      {esIngreso && sinPagar && onMoverMes && (
+        <Box sx={{ px: 1.75, pb: 1, display: 'flex', justifyContent: 'flex-end' }}>
+          <Box
+            onClick={e => { e.stopPropagation(); onMoverMes(); }}
+            sx={{ px: 1.25, py: 0.375, borderRadius: '8px', border: '1px solid rgba(99,102,241,0.3)', bgcolor: 'rgba(99,102,241,0.06)', cursor: 'pointer', '&:active': { opacity: 0.7 } }}
+          >
+            <Typography sx={{ fontSize: 11, fontWeight: 600, color: '#6366F1' }}>→ Sig. mes</Typography>
+          </Box>
+        </Box>
+      )}
       {presupuesto > 0 && (
         <Box sx={{ mx: 1.75, mb: 0.875, height: 3, borderRadius: 2, bgcolor: '#F3F4F6', overflow: 'hidden' }}>
           <Box sx={{ height: '100%', width: `${pct}%`, bgcolor: pagadoTotal ? GREEN : T1, borderRadius: 2, transition: 'width 0.4s' }} />
@@ -398,9 +410,16 @@ function IngresoRecibido({ tx }) {
 }
 
 // ── Tab: Mis pagos ─────────────────────────────────────────
-function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
+function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoItem, deletePresupuestoItem, showToast }) {
   const [mes, setMes] = useState(getMesActual());
   const mesIdx = MESES.indexOf(mes);
+
+  function moverItemAlSiguienteMes(item) {
+    const nextMes = MESES[Math.min(mesIdx + 1, MESES.length - 1)];
+    deletePresupuestoItem(mes, item.id);
+    addPresupuestoItem(nextMes, { concepto: item.concepto, categoria: item.categoria, monto: item.monto });
+    showToast(`${item.concepto} movido a ${MES_NAMES[MESES.indexOf(nextMes)]}`, 'success');
+  }
 
   const presupMes = state.presupuestos?.[mes] || {};
   const txsMes = useMemo(() => state.transacciones.filter(t => t.mes === mes), [state.transacciones, mes]);
@@ -472,9 +491,6 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
   const totalIngPresup     = state.categoriasIngreso.reduce((s, c) => s + (presupMes[c] || 0), 0);
   const totalIngRecibido   = txsMes.filter(t => t.movimiento === 'Ingreso' && t.categoria !== 'Pago TC').reduce((s, t) => s + Math.abs(t.total), 0);
   const balance            = totalIngRecibido - totalGastado;
-  // Caja: solo gastos que ya salieron de cuentas reales (excluye T.C)
-  const gastosCaja   = txsMes.filter(t => t.movimiento === 'Egreso' && t.cuenta !== 'T.C').reduce((s, t) => s + Math.abs(t.total), 0);
-  const balanceCaja  = totalIngRecibido - gastosCaja;
 
   const [payModal, setPayModal] = useState(null);
 
@@ -566,24 +582,6 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
             )}
           </Box>
 
-          {/* Divider */}
-          <Box sx={{ height: '1px', bgcolor: BORDER, mx: 1.5 }} />
-
-          {/* Fila 2: Balance de caja */}
-          <Box sx={{ p: 1.5, pt: 1.25, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Box>
-              <Typography sx={{ fontSize: 9, fontWeight: 700, color: T2, textTransform: 'uppercase', letterSpacing: '0.07em', mb: 0.25 }}>Caja disponible</Typography>
-              <Typography sx={{ fontSize: 9, color: T2 }}>Ingresos − gastos reales (sin T.C)</Typography>
-            </Box>
-            <Box sx={{ textAlign: 'right' }}>
-              <Typography sx={{ fontSize: 18, fontWeight: 800, color: balanceCaja >= 0 ? GREEN : RED, fontFamily: 'monospace', lineHeight: 1 }}>
-                {balanceCaja < 0 ? '-' : ''}{fmtCOP(Math.abs(balanceCaja))}
-              </Typography>
-              <Typography sx={{ fontSize: 9, color: T2, mt: 0.25 }}>
-                {fmtCOP(gastosCaja)} en cuentas reales
-              </Typography>
-            </Box>
-          </Box>
         </Box>
       )}
 
@@ -601,6 +599,7 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, showToast }) {
                   pagado={ingresosRecibidos[item.concepto || item.categoria] || 0}
                   esIngreso={true}
                   onOpen={() => openPay({ cat: item.concepto || item.categoria, categoriaReal: item.categoria, presupuesto: item.monto, pagado: ingresosRecibidos[item.concepto || item.categoria] || 0, esIngreso: true, itemId: item.id, conceptoFijo: item.concepto || item.categoria })}
+                  onMoverMes={() => moverItemAlSiguienteMes(item)}
                 />
               ))
             ) : (
@@ -1062,7 +1061,7 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
 
 // ── Página principal ───────────────────────────────────────
 export default function Registrar() {
-  const { addTransaccion, pagarPresupuestoItem, state } = useFinanzas();
+  const { addTransaccion, pagarPresupuestoItem, addPresupuestoItem, deletePresupuestoItem, state } = useFinanzas();
   const { showToast } = useSnackbar();
   const [tab, setTab] = useState('pagos');
 
@@ -1092,7 +1091,7 @@ export default function Registrar() {
           </Box>
         </Box>
 
-        {tab === 'pagos'     && <MisPagos     state={state} addTransaccion={addTransaccion} pagarPresupuestoItem={pagarPresupuestoItem} showToast={showToast} />}
+        {tab === 'pagos'     && <MisPagos     state={state} addTransaccion={addTransaccion} pagarPresupuestoItem={pagarPresupuestoItem} addPresupuestoItem={addPresupuestoItem} deletePresupuestoItem={deletePresupuestoItem} showToast={showToast} />}
         {tab === 'registrar' && <FormRegistrar state={state} addTransaccion={addTransaccion} showToast={showToast} />}
 
       </Box>
