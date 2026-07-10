@@ -24,28 +24,36 @@ function QuickCapture({ open, onClose }) {
   const [monto,     setMonto]     = useState('');
   const [categoria, setCategoria] = useState('');
   const [cuenta,    setCuenta]    = useState('');
-  const inputRef = useRef(null);
+  const [fecha,     setFecha]     = useState('');
+  const inputRef  = useRef(null);
+  const dateRef   = useRef(null);
+
+  const todayStr = () => new Date().toISOString().split('T')[0];
+  const ayerStr  = () => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0]; };
 
   useEffect(() => {
     if (open) {
       setTipo('Egreso'); setMonto(''); setCategoria(''); setCuenta('');
+      setFecha(todayStr());
       setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [open]);
 
-  const cats     = tipo === 'Egreso' ? CATS_EGRESO : CATS_INGRESO;
-  const cuentas  = (state.cuentas || []).filter(c => c !== 'T.C');
-  const tarjetas = state.tarjetas || [];
-  const allCuentas = [...cuentas, ...tarjetas.map(t => t.nombre)];
+  const cats          = tipo === 'Egreso' ? CATS_EGRESO : CATS_INGRESO;
+  const tarjetas      = state.tarjetas || [];
+  const tarjetaNombres = new Set(tarjetas.map(t => t.nombre));
+  const cuentas       = (state.cuentas || []).filter(c => c !== 'T.C' && !tarjetaNombres.has(c));
 
   function guardar() {
     const val = parseInt(monto.replace(/\D/g, ''), 10);
     if (!val || !categoria || !cuenta) return;
-    const hoy = new Date().toISOString().split('T')[0];
-    const mes = 'M' + parseInt(hoy.split('-')[1], 10);
-    const esTarjeta = tarjetas.some(t => t.nombre === cuenta);
+    const fechaFinal = fecha || todayStr();
+    const mes = 'M' + parseInt(fechaFinal.split('-')[1], 10);
+    const esTarjeta = tarjetaNombres.has(cuenta);
     addTransaccion({
-      id: Date.now(), fecha: new Date().toISOString(), mes,
+      id: Date.now(),
+      fecha: new Date(fechaFinal + 'T12:00:00').toISOString(),
+      mes,
       tipo: 'Variable', movimiento: tipo,
       categoria, concepto: categoria,
       total: tipo === 'Egreso' ? -val : val,
@@ -60,8 +68,12 @@ function QuickCapture({ open, onClose }) {
   }
 
   if (!open) return null;
-  const canSave = monto && categoria && cuenta;
+  const canSave     = monto && categoria && cuenta;
   const accentColor = tipo === 'Egreso' ? QC_RED : QC_GREEN;
+  const hoy         = todayStr();
+  const ayer        = ayerStr();
+  const fechaLabel  = fecha === hoy ? 'Hoy' : fecha === ayer ? 'Ayer'
+    : fecha ? new Date(fecha + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }) : 'Hoy';
 
   return (
     <>
@@ -76,17 +88,37 @@ function QuickCapture({ open, onClose }) {
         {/* Handle */}
         <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: '#E5E7EB', mx: 'auto', mb: 1.75 }} />
 
-        {/* Tipo */}
-        <Box sx={{ display: 'flex', gap: 0, p: '3px', borderRadius: '10px', bgcolor: '#EBEBEB', mb: 1.5 }}>
-          {['Egreso', 'Ingreso'].map(t => (
-            <Box key={t} onClick={() => { setTipo(t); setCategoria(''); }} sx={{
-              flex: 1, py: 0.75, borderRadius: '8px', textAlign: 'center',
-              fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.12s',
-              bgcolor: tipo === t ? '#fff' : 'transparent',
-              color:   tipo === t ? (t === 'Egreso' ? QC_RED : QC_GREEN) : QC_T2,
-              boxShadow: tipo === t ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
-            }}>{t}</Box>
-          ))}
+        {/* Tipo + Fecha en misma fila */}
+        <Box sx={{ display: 'flex', gap: 1, mb: 1.5, alignItems: 'center' }}>
+          <Box sx={{ flex: 1, display: 'flex', p: '3px', borderRadius: '10px', bgcolor: '#EBEBEB' }}>
+            {['Egreso', 'Ingreso'].map(t => (
+              <Box key={t} onClick={() => { setTipo(t); setCategoria(''); }} sx={{
+                flex: 1, py: 0.75, borderRadius: '8px', textAlign: 'center',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.12s',
+                bgcolor: tipo === t ? '#fff' : 'transparent',
+                color:   tipo === t ? (t === 'Egreso' ? QC_RED : QC_GREEN) : QC_T2,
+                boxShadow: tipo === t ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+              }}>{t}</Box>
+            ))}
+          </Box>
+          {/* Fecha — botón que abre el date input nativo */}
+          <Box sx={{ position: 'relative', flexShrink: 0 }}>
+            <Box component="input" ref={dateRef} type="date" value={fecha}
+              onChange={e => setFecha(e.target.value)}
+              sx={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', zIndex: 1 }}
+            />
+            <Box sx={{
+              display: 'flex', alignItems: 'center', gap: 0.625,
+              px: 1.25, py: 0.875, borderRadius: '10px',
+              bgcolor: '#F3F4F6', border: '1px solid #E5E7EB', cursor: 'pointer',
+            }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={QC_T2} strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <Typography sx={{ fontSize: 12, fontWeight: 600, color: QC_T1 }}>{fechaLabel}</Typography>
+            </Box>
+          </Box>
         </Box>
 
         {/* Monto */}
@@ -116,17 +148,40 @@ function QuickCapture({ open, onClose }) {
           ))}
         </Box>
 
-        {/* Cuentas */}
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.625, mb: 1.75 }}>
-          {allCuentas.map(c => (
-            <Box key={c} onClick={() => setCuenta(c)} sx={{
-              px: 1.125, py: 0.5, borderRadius: '20px', fontSize: 12, fontWeight: 600,
-              cursor: 'pointer', border: '1px solid', transition: 'all 0.1s',
-              borderColor: cuenta === c ? QC_T1 : QC_BORDER,
-              bgcolor:     cuenta === c ? QC_T1 : '#fff',
-              color:       cuenta === c ? '#fff' : QC_T2,
-            }}>{c}</Box>
-          ))}
+        {/* Cuentas y Tarjetas separadas */}
+        <Box sx={{ mb: 1.75, display: 'flex', flexDirection: 'column', gap: 0.875 }}>
+          {cuentas.length > 0 && (
+            <Box>
+              <Typography sx={{ fontSize: 10, fontWeight: 700, color: QC_T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.625 }}>Cuenta</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.625 }}>
+                {cuentas.map(c => (
+                  <Box key={c} onClick={() => setCuenta(c)} sx={{
+                    px: 1.125, py: 0.5, borderRadius: '20px', fontSize: 12, fontWeight: 600,
+                    cursor: 'pointer', border: '1px solid', transition: 'all 0.1s',
+                    borderColor: cuenta === c ? QC_T1 : QC_BORDER,
+                    bgcolor:     cuenta === c ? QC_T1 : '#F9FAFB',
+                    color:       cuenta === c ? '#fff' : QC_T2,
+                  }}>{c}</Box>
+                ))}
+              </Box>
+            </Box>
+          )}
+          {tarjetas.length > 0 && (
+            <Box>
+              <Typography sx={{ fontSize: 10, fontWeight: 700, color: '#6366F1', textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.625 }}>Tarjeta de crédito</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.625 }}>
+                {tarjetas.map(t => (
+                  <Box key={t.nombre} onClick={() => setCuenta(t.nombre)} sx={{
+                    px: 1.125, py: 0.5, borderRadius: '20px', fontSize: 12, fontWeight: 600,
+                    cursor: 'pointer', border: '1px solid', transition: 'all 0.1s',
+                    borderColor: cuenta === t.nombre ? '#6366F1' : '#E0E7FF',
+                    bgcolor:     cuenta === t.nombre ? '#6366F1' : '#EEF2FF',
+                    color:       cuenta === t.nombre ? '#fff'    : '#6366F1',
+                  }}>{t.nombre}</Box>
+                ))}
+              </Box>
+            </Box>
+          )}
         </Box>
 
         {/* Guardar */}
@@ -242,6 +297,20 @@ const ALL_TABS = [
     </svg>,
   },
   {
+    path: '/deudas',
+    label: 'Deudas',
+    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/><path d="M8 12h4"/>
+    </svg>,
+  },
+  {
+    path: '/apuntes',
+    label: 'Apuntes',
+    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>,
+  },
+  {
     path: '/ia',
     label: 'IA',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -327,7 +396,7 @@ export default function Layout({ children }) {
     },
     {
       label: 'Finanzas',
-      items: ['/inversiones', '/metas', '/mercado'],
+      items: ['/inversiones', '/metas', '/mercado', '/deudas'],
     },
     {
       label: 'Análisis',
@@ -335,7 +404,7 @@ export default function Layout({ children }) {
     },
     {
       label: 'Más',
-      items: ['/habitos', '/config'],
+      items: ['/habitos', '/apuntes', '/config'],
     },
   ];
 
