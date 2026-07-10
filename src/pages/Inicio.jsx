@@ -153,13 +153,8 @@ export default function Inicio() {
   const pctGastado = egPresPlan > 0 ? Math.min(metrics.eg / egPresPlan, 1) : 0
   const hayPresup  = ingPres > 0 || egPresPlan > 0
 
-  // Proyección fin de mes: disponible hoy + ingresos pendientes de recibir − gastos que faltan pagar
-  const ingresosPendientes = useMemo(() =>
-    (state.transacciones || [])
-      .filter(t => t.mes === mes && t.movimiento === 'Ingreso' && t.categoria !== 'Pago TC' && (t.estado === 'pendiente' || t.esFuturo))
-      .reduce((s, t) => s + Math.abs(t.total), 0),
-    [state.transacciones, mes]
-  )
+  // Proyección fin de mes: disponible hoy + ingresos presupuestados aún no recibidos − gastos que faltan pagar
+  const ingresosPendientes = Math.max(ingPres - ingRecibidoPresup, 0)
   const gastosPendientes = Math.max(egPresPlan - metrics.eg, 0)
   const proyeccionFinMes = disponibleHoy + ingresosPendientes - gastosPendientes
   const proyColor = proyeccionFinMes < 0 ? RED : proyeccionFinMes < margenPlan * 0.8 ? '#F59E0B' : GREEN
