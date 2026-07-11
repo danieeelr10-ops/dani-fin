@@ -291,15 +291,21 @@ const ALL_TABS = [
       <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
     </svg>,
   },
+  {
+    path: '/apuntes',
+    label: 'Apuntes',
+    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>,
+  },
   // Accesibles por URL pero no en nav principal
-  { path: '/flujo',      label: 'Flujo',     icon: null },
-  { path: '/dashboard',  label: 'Gráficas',  icon: null },
-  { path: '/reportes',   label: 'Reportes',  icon: null },
-  { path: '/inversiones',label: 'Inversiones',icon: null },
-  { path: '/metas',      label: 'Metas',     icon: null },
-  { path: '/mercado',    label: 'Mercado',   icon: null },
-  { path: '/habitos',    label: 'Hábitos',   icon: null },
-  { path: '/apuntes',    label: 'Apuntes',   icon: null },
+  { path: '/flujo',      label: 'Flujo',      icon: null },
+  { path: '/dashboard',  label: 'Gráficas',   icon: null },
+  { path: '/reportes',   label: 'Reportes',   icon: null },
+  { path: '/inversiones',label: 'Inversiones', icon: null },
+  { path: '/metas',      label: 'Metas',      icon: null },
+  { path: '/mercado',    label: 'Mercado',    icon: null },
+  { path: '/habitos',    label: 'Hábitos',    icon: null },
 ];
 
 function NavItem({ tab, active, collapsed, onClick }) {
@@ -381,7 +387,7 @@ export default function Layout({ children }) {
     },
     {
       label: 'Extras',
-      items: ['/flujo', '/mercado', '/habitos', '/apuntes', '/config'],
+      items: ['/flujo', '/mercado', '/habitos', '/config'],
     },
   ];
 
