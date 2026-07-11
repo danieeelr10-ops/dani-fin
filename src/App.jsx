@@ -22,6 +22,10 @@ import Inversiones from './pages/Inversiones';
 import FlujoDeCaja from './pages/FlujoDeCaja';
 import Cobros from './pages/Cobros';
 import Reportes from './pages/Reportes';
+import Deudas from './pages/Deudas';
+import Apuntes from './pages/Apuntes';
+import Analisis from './pages/Analisis';
+import Ahorro from './pages/Ahorro';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -57,6 +61,10 @@ function AppRoutes() {
             <Route path="/flujo"       element={<FlujoDeCaja />} />
             <Route path="/cobros"      element={<Cobros />} />
             <Route path="/reportes"    element={<Reportes />} />
+            <Route path="/deudas"      element={<Deudas />} />
+            <Route path="/apuntes"     element={<Apuntes />} />
+            <Route path="/analisis"    element={<Analisis />} />
+            <Route path="/ahorro"      element={<Ahorro />} />
             <Route path="/seed"        element={<Seed />} />
           </Routes>
         </Layout>
