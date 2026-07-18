@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
 import { theme } from './theme';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FinanzasProvider, useFinanzas } from './context/FinanzasContext';
+import { FeaturesProvider } from './context/FeaturesContext';
 import { SnackbarProvider } from './context/SnackbarContext';
 import Layout from './components/Layout';
 import Onboarding, { needsOnboarding } from './components/Onboarding';
@@ -26,6 +28,7 @@ import Deudas from './pages/Deudas';
 import Apuntes from './pages/Apuntes';
 import Analisis from './pages/Analisis';
 import Ahorro from './pages/Ahorro';
+import Admin from './pages/Admin';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -40,20 +43,30 @@ function AppRoutes() {
 
   if (!user) return <Login />;
 
+  // Limpiar datos de otro usuario si el ID no coincide
+  const storedUid = localStorage.getItem('dani_fin_uid')
+  if (storedUid && storedUid !== user.id) {
+    localStorage.removeItem('dani_fin_v2')
+    localStorage.removeItem('dani_fin_onboarding_done')
+    // dani_fin_new_user NO se toca: pertenece al usuario nuevo que acaba de registrarse
+  }
+  localStorage.setItem('dani_fin_uid', user.id)
+
   return (
-    <FinanzasProvider>
-      <SnackbarProvider>
-        <AuthenticatedApp />
-      </SnackbarProvider>
-    </FinanzasProvider>
+    <FeaturesProvider>
+      <FinanzasProvider key={user.id}>
+        <SnackbarProvider>
+          <AuthenticatedApp />
+        </SnackbarProvider>
+      </FinanzasProvider>
+    </FeaturesProvider>
   );
 }
 
 function AuthenticatedApp() {
-  const { state } = useFinanzas();
-  const { user } = useAuth();
+  const [showOnboarding, setShowOnboarding] = useState(() => needsOnboarding())
 
-  if (needsOnboarding(state, user)) return <Onboarding />;
+  if (showOnboarding) return <Onboarding onComplete={() => setShowOnboarding(false)} />;
 
   return (
     <Layout>
@@ -77,6 +90,7 @@ function AuthenticatedApp() {
             <Route path="/apuntes"     element={<Apuntes />} />
             <Route path="/analisis"    element={<Analisis />} />
             <Route path="/ahorro"      element={<Ahorro />} />
+            <Route path="/admin"       element={<Admin />} />
             <Route path="/seed"        element={<Seed />} />
           </Routes>
     </Layout>

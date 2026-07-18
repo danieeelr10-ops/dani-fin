@@ -30,9 +30,12 @@ export default function Login() {
         const { error } = await signIn(email, password);
         if (error) setError(error.message);
       } else {
+        localStorage.setItem('dani_fin_new_user', '1');
         const { error } = await signUp(email, password);
-        if (error) setError(error.message);
-        else setMsg('Revisa tu correo para confirmar la cuenta, luego inicia sesión.');
+        if (error) {
+          localStorage.removeItem('dani_fin_new_user');
+          setError(error.message);
+        }
       }
     } finally {
       setLoading(false);

@@ -155,9 +155,8 @@ function DashboardInner() {
         {/* KPIs */}
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 3 }}>
           {[
-            { label: 'Ingresos',    value: formatMoney(m.ing),   color: GREEN, sub: null },
-            { label: 'Egresos',     value: formatMoney(m.eg),    color: RED,   sub: null },
-            { label: 'Neto',        value: (m.neto >= 0 ? '+' : '') + formatMoney(m.neto), color: m.neto >= 0 ? GREEN : RED, sub: `Tasa ahorro ${(m.tasaAhorro * 100).toFixed(0)}%` },
+            { label: 'Ingresos',    value: formatMoney(m.ing),      color: GREEN, sub: null },
+            { label: 'Egresos',     value: formatMoney(m.eg),       color: RED,   sub: null },
             { label: 'Prom. diario',value: formatMoney(promDiario), color: T1, sub: `Proyectado ${formatMoney(proyectado)}` },
           ].map(({ label, value, color, sub }) => (
             <Box key={label} sx={{ bgcolor: CARD, borderRadius: '12px', boxShadow: CARD_SH, border: `1px solid ${BORDER}`, p: 1.75 }}>
@@ -317,7 +316,8 @@ function DashboardInner() {
               if (!mt.hasData) return null;
               const isActive = m2 === mes;
               const pct = Math.min((mt.eg / (mt.ing || 1)) * 100, 100);
-              const barColor = mt.tasaAhorro >= 0.2 ? GREEN : mt.tasaAhorro >= 0 ? '#D97706' : RED;
+              const tasaFlujo = mt.ing > 0 ? mt.flujoMes / mt.ing : 0;
+              const barColor = tasaFlujo >= 0.2 ? GREEN : tasaFlujo >= 0 ? '#D97706' : RED;
               return (
                 <Box key={m2} onClick={() => setMes(m2)} sx={{
                   display: 'flex', alignItems: 'center', gap: 1.5,
@@ -333,15 +333,15 @@ function DashboardInner() {
                   <Box sx={{ flex: 1 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.4 }}>
                       <Typography sx={{ fontSize: 11, color: T2 }}>{formatMoney(mt.eg)} / {formatMoney(mt.ing)}</Typography>
-                      <Typography sx={{ fontSize: 11, fontWeight: 700, color: mt.neto >= 0 ? GREEN : RED }}>
-                        {mt.neto >= 0 ? '+' : ''}{formatMoney(mt.neto)}
+                      <Typography sx={{ fontSize: 11, fontWeight: 700, color: mt.flujoMes >= 0 ? GREEN : RED }}>
+                        {mt.flujoMes >= 0 ? '+' : ''}{formatMoney(mt.flujoMes)}
                       </Typography>
                     </Box>
                     <Box sx={{ height: 4, borderRadius: 2, bgcolor: '#F3F4F6', overflow: 'hidden' }}>
                       <Box sx={{ height: '100%', width: `${pct}%`, bgcolor: barColor, borderRadius: 2, transition: 'width 0.4s' }} />
                     </Box>
                   </Box>
-                  <StatusBadge rate={mt.tasaAhorro} />
+                  <StatusBadge rate={tasaFlujo} />
                 </Box>
               );
             })}

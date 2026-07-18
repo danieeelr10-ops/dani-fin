@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useFinanzas } from 'src/context/FinanzasContext';
 import { useSnackbar } from 'src/context/SnackbarContext';
 import { useAuth } from 'src/context/AuthContext';
+import { useFeatures } from 'src/context/FeaturesContext';
 import { usePWA } from 'src/hooks/usePWA';
 import { checkDueReminders, refreshBadge } from 'src/utils/notifications';
 import { CAT_ICONS } from 'src/constants';
@@ -215,108 +216,117 @@ const COLLAPSED_W = 60;
 
 const ALL_TABS = [
   {
-    path: '/inicio',
-    label: 'Inicio',
+    path: '/inicio', featureKey: 'inicio', label: 'Inicio',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
     </svg>,
   },
   {
-    path: '/registro',
-    label: 'Registrar',
+    path: '/registro', featureKey: 'registro', label: 'Registrar',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
     </svg>,
   },
   {
-    path: '/historial',
-    label: 'Historial',
+    path: '/historial', featureKey: 'historial', label: 'Historial',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
     </svg>,
   },
   {
-    path: '/presupuesto',
-    label: 'Presupuesto',
+    path: '/presupuesto', featureKey: 'presupuesto', label: 'Presupuesto',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
     </svg>,
   },
   {
-    path: '/tc',
-    label: 'T.C',
+    path: '/tc', featureKey: 'tc', label: 'T.C',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
     </svg>,
   },
   {
-    path: '/deudas',
-    label: 'Deudas',
+    path: '/deudas', featureKey: 'deudas', label: 'Deudas',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/><path d="M8 12h4"/>
     </svg>,
   },
   {
-    path: '/ahorro',
-    label: 'Ahorro',
+    path: '/ahorro', featureKey: 'ahorro', label: 'Ahorro',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
     </svg>,
   },
   {
-    path: '/analisis',
-    label: 'Análisis',
+    path: '/analisis', featureKey: 'analisis', label: 'Análisis',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
     </svg>,
   },
   {
-    path: '/ia',
-    label: 'IA',
+    path: '/ia', featureKey: 'ia', label: 'IA',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
     </svg>,
   },
   {
-    path: '/config',
-    label: 'Config',
+    path: '/config', featureKey: 'config', label: 'Config',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
     </svg>,
   },
   {
-    path: '/apuntes',
-    label: 'Apuntes',
+    path: '/apuntes', featureKey: 'apuntes', label: 'Apuntes',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
     </svg>,
   },
+  // Admin — solo visible si isAdmin (filtrado en render)
+  {
+    path: '/admin', label: 'Admin',
+    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg>,
+  },
   // Accesibles por URL pero no en nav principal
-  { path: '/flujo',      label: 'Flujo',      icon: null },
-  { path: '/dashboard',  label: 'Gráficas',   icon: null },
-  { path: '/reportes',   label: 'Reportes',   icon: null },
+  { path: '/flujo',      label: 'Flujo',       icon: null },
+  { path: '/dashboard',  label: 'Gráficas',    icon: null },
+  { path: '/reportes',   label: 'Reportes',    icon: null },
   { path: '/inversiones',label: 'Inversiones', icon: null },
-  { path: '/metas',      label: 'Metas',      icon: null },
-  { path: '/mercado',    label: 'Mercado',    icon: null },
-  { path: '/habitos',    label: 'Hábitos',    icon: null },
+  { path: '/metas',      label: 'Metas',       icon: null },
+  { path: '/mercado',    label: 'Mercado',     icon: null },
+  { path: '/habitos',    label: 'Hábitos',     icon: null },
 ];
 
-function NavItem({ tab, active, collapsed, onClick }) {
+function NavItem({ tab, active, collapsed, onClick, locked }) {
   const item = (
-    <Box onClick={onClick} sx={{
+    <Box onClick={locked ? undefined : onClick} sx={{
       display: 'flex', alignItems: 'center', gap: 1.5,
-      px: collapsed ? 0 : 1.5, py: 1.0, mx: 1, borderRadius: 1.5, cursor: 'pointer',
+      px: collapsed ? 0 : 1.5, py: 1.0, mx: 1, borderRadius: 1.5,
+      cursor: locked ? 'default' : 'pointer',
       justifyContent: collapsed ? 'center' : 'flex-start',
-      color: active ? 'primary.main' : 'text.secondary',
+      color: locked ? 'text.disabled' : active ? 'primary.main' : 'text.secondary',
       bgcolor: active ? alpha('#00A76F', 0.1) : 'transparent',
       transition: 'all 0.15s ease',
-      '&:hover': { bgcolor: active ? alpha('#00A76F', 0.14) : 'action.hover', color: active ? 'primary.main' : 'text.primary' },
+      opacity: locked ? 0.5 : 1,
+      '&:hover': locked ? {} : { bgcolor: active ? alpha('#00A76F', 0.14) : 'action.hover', color: active ? 'primary.main' : 'text.primary' },
     }}>
       <Box sx={{ flexShrink: 0, display: 'flex', opacity: active ? 1 : 0.65 }}>{tab.icon}</Box>
-      {!collapsed && <Typography sx={{ fontSize: 14, fontWeight: active ? 700 : 500, lineHeight: 1 }}>{tab.label}</Typography>}
+      {!collapsed && (
+        <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+          <Typography sx={{ fontSize: 14, fontWeight: active ? 700 : 500, lineHeight: 1 }}>{tab.label}</Typography>
+          {locked && (
+            <Box sx={{
+              position: 'absolute', left: -2, right: -2, top: '50%',
+              height: '1.5px', bgcolor: 'text.disabled', transform: 'translateY(-50%)',
+            }} />
+          )}
+        </Box>
+      )}
     </Box>
   );
-  if (collapsed) return <Tooltip title={tab.label} placement="right" arrow>{item}</Tooltip>;
+  const tooltipTitle = locked ? `${tab.label} (no habilitado)` : tab.label;
+  if (collapsed) return <Tooltip title={tooltipTitle} placement="right" arrow>{item}</Tooltip>;
   return item;
 }
 
@@ -330,6 +340,7 @@ export default function Layout({ children }) {
   const [quickOpen, setQuickOpen] = useState(false);
   const { undo, historyLen } = useFinanzas();
   const { signOut } = useAuth();
+  const { hasFeature, isAdmin } = useFeatures();
   const { installPrompt, isInstalled, isIOS, notifPermission, promptInstall, requestNotifPermission } = usePWA();
 
   // Revisar recordatorios y actualizar badge al cargar
@@ -364,25 +375,19 @@ export default function Layout({ children }) {
   const tabHistorial   = ALL_TABS.find(t => t.path === '/historial');
   const tabPresupuesto = ALL_TABS.find(t => t.path === '/presupuesto');
 
-  // Grupos del drawer "Más" mobile
-  const DRAWER_GROUPS = [
-    {
-      label: 'Registrar',
-      items: ['/registro', '/tc'],
-    },
-    {
-      label: 'Finanzas',
-      items: ['/deudas', '/ahorro'],
-    },
-    {
-      label: 'Análisis',
-      items: ['/analisis', '/ia'],
-    },
-    {
-      label: 'Extras',
-      items: ['/flujo', '/mercado', '/habitos', '/config'],
-    },
+  // Grupos del drawer "Más" mobile — filtrado por features
+  const DRAWER_GROUPS_DEF = [
+    { label: 'Registrar', items: ['/registro', '/tc'] },
+    { label: 'Finanzas',  items: ['/deudas', '/ahorro'] },
+    { label: 'Análisis',  items: ['/analisis', '/ia'] },
+    { label: 'Extras',    items: ['/flujo', '/mercado', '/habitos', '/config'] },
+    ...(isAdmin ? [{ label: 'Admin', items: ['/admin'] }] : []),
   ];
+  // Mostrar todos los items (incluyendo bloqueados) — el filtro es solo para remover paths que no existen
+  const DRAWER_GROUPS = DRAWER_GROUPS_DEF.map(g => ({
+    ...g,
+    items: g.items.filter(path => ALL_TABS.find(t => t.path === path)),
+  })).filter(g => g.items.length > 0);
 
   function goTo(path) { navigate(path); setMoreOpen(false); }
 
@@ -530,13 +535,16 @@ export default function Layout({ children }) {
                       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0.75 }}>
                         {groupTabs.map(tab => {
                           const active = pathname === tab.path;
+                          const locked = !!(tab.featureKey && !hasFeature(tab.featureKey));
                           return (
-                            <Box key={tab.path} onClick={() => goTo(tab.path)} sx={{
+                            <Box key={tab.path} onClick={locked ? undefined : () => goTo(tab.path)} sx={{
                               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.625,
-                              py: 1.25, px: 0.5, borderRadius: '12px', cursor: 'pointer',
+                              py: 1.25, px: 0.5, borderRadius: '12px',
+                              cursor: locked ? 'default' : 'pointer',
+                              opacity: locked ? 0.45 : 1,
                               bgcolor: active ? 'rgba(0,167,111,0.08)' : '#F9FAFB',
                               border: '1px solid', borderColor: active ? 'rgba(0,167,111,0.25)' : '#F3F4F6',
-                              '&:active': { opacity: 0.7 },
+                              '&:active': locked ? {} : { opacity: 0.7 },
                             }}>
                               <Box sx={{
                                 width: 40, height: 40, borderRadius: '10px',
@@ -547,9 +555,14 @@ export default function Layout({ children }) {
                               }}>
                                 {tab.icon}
                               </Box>
-                              <Typography sx={{ fontSize: 10, fontWeight: active ? 700 : 500, color: active ? '#00A76F' : '#374151', textAlign: 'center', lineHeight: 1.2 }}>
-                                {tab.label}
-                              </Typography>
+                              <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+                                <Typography sx={{ fontSize: 10, fontWeight: active ? 700 : 500, color: active ? '#00A76F' : '#374151', textAlign: 'center', lineHeight: 1.2 }}>
+                                  {tab.label}
+                                </Typography>
+                                {locked && (
+                                  <Box sx={{ position: 'absolute', left: 0, right: 0, top: '50%', height: '1.5px', bgcolor: '#9CA3AF', transform: 'translateY(-50%)' }} />
+                                )}
+                              </Box>
                             </Box>
                           );
                         })}
@@ -624,9 +637,26 @@ export default function Layout({ children }) {
 
         {/* Nav */}
         <Box sx={{ flex: 1, pt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.125, overflowY: 'auto' }}>
-          {ALL_TABS.filter(tab => tab.icon).map(tab => (
-            <NavItem key={tab.path} tab={tab} active={pathname === tab.path} collapsed={collapsed} onClick={() => navigate(tab.path)} />
-          ))}
+          {ALL_TABS.filter(tab => tab.icon && tab.path !== '/admin').map(tab => {
+            const locked = !!(tab.featureKey && !hasFeature(tab.featureKey))
+            return (
+              <NavItem key={tab.path} tab={tab} active={pathname === tab.path}
+                collapsed={collapsed} locked={locked} onClick={() => navigate(tab.path)} />
+            )
+          })}
+          {isAdmin && (
+            <NavItem
+              tab={{
+                path: '/admin', label: 'Admin',
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>,
+              }}
+              active={pathname === '/admin'}
+              collapsed={collapsed}
+              onClick={() => navigate('/admin')}
+            />
+          )}
         </Box>
 
         <Divider />

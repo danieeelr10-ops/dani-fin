@@ -146,6 +146,16 @@ export default function Cobros() {
     setEditando(null);
   }
 
+  function pasarAlSiguienteMes(tx) {
+    const mesNum     = parseInt((tx.mes || mes).replace('M', ''));
+    const nextMesNum = Math.min(mesNum + 1, 12);
+    const nextMes    = `M${nextMesNum}`;
+    const year       = new Date().getFullYear();
+    const nextFecha  = `${year}-${String(nextMesNum).padStart(2, '0')}-01T12:00:00`;
+    updateTransaccion(tx.id, { mes: nextMes, fecha: nextFecha });
+    showToast(`Movido a ${MES_NAMES[nextMesNum - 1]}`, 'success');
+  }
+
   const mesNombre = MES_NAMES[MESES.indexOf(mes)];
 
   return (
@@ -323,6 +333,13 @@ export default function Cobros() {
                           cursor: 'pointer', '&:active': { opacity: 0.7 }, textAlign: 'center',
                         }}>
                           <Typography sx={{ fontSize: 12, fontWeight: 600, color: GREEN }}>✓ Recibido</Typography>
+                        </Box>
+                        <Box onClick={() => pasarAlSiguienteMes(t)} sx={{
+                          px: 1.25, py: 0.5, borderRadius: '8px',
+                          border: `1px solid rgba(99,102,241,0.3)`, bgcolor: 'rgba(99,102,241,0.06)',
+                          cursor: 'pointer', '&:active': { opacity: 0.7 }, whiteSpace: 'nowrap',
+                        }}>
+                          <Typography sx={{ fontSize: 11, fontWeight: 600, color: '#6366F1' }}>→ Sig. mes</Typography>
                         </Box>
                         <Box onClick={() => setEditando(t)} sx={{
                           px: 1.25, py: 0.5, borderRadius: '8px',

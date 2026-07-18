@@ -35,6 +35,8 @@ const INITIAL_STATE = {
   perfilIngresos: 'variable',
   metasPersonalizadas: [],
   nombreUsuario: '',
+  deudas: [],
+  apuntes: { pagosClub: [], notas: [] },
   lastModified: 0,
 };
 
@@ -69,6 +71,8 @@ function mergeWithDefaults(p) {
     perfilIngresos:           p.perfilIngresos           || 'variable',
     metasPersonalizadas:      p.metasPersonalizadas      || [],
     nombreUsuario:            p.nombreUsuario            || '',
+    deudas:                   p.deudas                   || [],
+    apuntes:                  p.apuntes                  || { pagosClub: [], notas: [] },
     lastModified:             p.lastModified             || 0,
   };
 }
@@ -588,11 +592,12 @@ export function FinanzasProvider({ children }) {
       const { state: s2, changed: c2 } = migrateMercadoOrphans(s1);
       const { state: s2b, changed: c2b } = addTarjetaNu(s2);
 
-      // Seeds solo en desarrollo local — NUNCA en producción para no sobreescribir datos reales
-      const { state: s3, changed: c3 } = IS_DEV ? seedNuAbril(s2b)       : { state: s2b, changed: false };
-      const { state: s4, changed: c4 } = IS_DEV ? seedNuMarzo(s3)        : { state: s3,  changed: false };
-      const { state: s5, changed: c5 } = IS_DEV ? seedLocal2026(s4)      : { state: s4,  changed: false };
-      const { state: s6, changed: c6 } = IS_DEV ? seedCierresPrueba(s5)  : { state: s5,  changed: false };
+      // Seeds solo en desarrollo local Y solo si ya hay transacciones previas (cuenta de Dani)
+      const esUsuarioExistente = (s2b.transacciones || []).length > 0;
+      const { state: s3, changed: c3 } = IS_DEV && esUsuarioExistente ? seedNuAbril(s2b)       : { state: s2b, changed: false };
+      const { state: s4, changed: c4 } = IS_DEV && esUsuarioExistente ? seedNuMarzo(s3)        : { state: s3,  changed: false };
+      const { state: s5, changed: c5 } = IS_DEV && esUsuarioExistente ? seedLocal2026(s4)      : { state: s4,  changed: false };
+      const { state: s6, changed: c6 } = IS_DEV && esUsuarioExistente ? seedCierresPrueba(s5)  : { state: s5,  changed: false };
 
       if (!c1 && !c2 && !c2b && !c3 && !c4 && !c5 && !c6) return prev;
       persistLocal(s6);
@@ -992,25 +997,61 @@ export function FinanzasProvider({ children }) {
     update(prev => {
       const m = computeMetrics(prev.transacciones || [], mes);
       const balance = m.neto;
-      const carry_over = balance > 0 ? balance : 0;
+
+      // Carry over positivo = ahorro trasladado, negativo = deuda trasladada
+      const carry_over = balance;
+
+      // Cobros pendientes del mes → mover al siguiente mes
+      const mesNum     = parseInt(mes.replace('M', ''));
+      const nextMesNum = Math.min(mesNum + 1, 12);
+      const nextMes    = `M${nextMesNum}`;
+      const year       = new Date().getFullYear();
+      const nextFecha  = `${year}-${String(nextMesNum).padStart(2, '0')}-01T12:00:00`;
+
+      const pendingIds = new Set(
+        (prev.transacciones || [])
+          .filter(t =>
+            t.mes === mes &&
+            t.movimiento === 'Ingreso' &&
+            (t.esFuturo === true || t.estado === 'pendiente' || t.estado === 'parcial')
+          )
+          .map(t => t.id)
+      );
+
+      const updatedTransacciones = (prev.transacciones || []).map(t =>
+        pendingIds.has(t.id) ? { ...t, mes: nextMes, fecha: nextFecha } : t
+      );
+
       const cierre = {
         mes,
-        year: new Date().getFullYear(),
-        total_income:    m.ing,
-        total_expenses:  m.egCash,
-        closing_balance: balance,
+        year,
+        total_income:      m.ing,
+        total_expenses:    m.egCash,
+        closing_balance:   balance,
         carry_over_amount: carry_over,
-        created_at: new Date().toISOString(),
+        cobros_moved:      pendingIds.size,
+        created_at:        new Date().toISOString(),
       };
-      return { ...prev, cierresMensuales: { ...prev.cierresMensuales, [mes]: cierre } };
+
+      return {
+        ...prev,
+        transacciones:    updatedTransacciones,
+        cierresMensuales: { ...prev.cierresMensuales, [mes]: cierre },
+      };
     });
   }
 
   function getCarryOver(mes) {
     const idx = parseInt(mes.replace('M', ''));
-    if (idx <= 1) return 0;
     const prevMes = `M${idx - 1}`;
-    return state.cierresMensuales?.[prevMes]?.carry_over_amount || 0;
+    const cierre = idx > 1 ? state.cierresMensuales?.[prevMes]?.carry_over_amount : undefined;
+    if (cierre !== undefined) return cierre;
+    // Sin cierres previos: usar saldos iniciales solo en el mes actual
+    const hasCierres = Object.keys(state.cierresMensuales || {}).length > 0;
+    if (!hasCierres && mes === getMesActual()) {
+      return Object.values(state.saldosIniciales || {}).reduce((s, v) => s + (v || 0), 0);
+    }
+    return 0;
   }
 
   function getCierre(mes) {
@@ -1043,6 +1084,86 @@ export function FinanzasProvider({ children }) {
 
   function deleteMetaPersonalizada(id) {
     update(prev => ({ ...prev, metasPersonalizadas: (prev.metasPersonalizadas || []).filter(m => m.id !== id) }));
+  }
+
+  function addPagoClub(pago) {
+    update(prev => ({
+      ...prev,
+      apuntes: {
+        ...prev.apuntes,
+        pagosClub: [{ ...pago, id: Date.now(), reportado: false }, ...(prev.apuntes?.pagosClub || [])],
+      },
+    }));
+  }
+
+  function togglePagoClub(id) {
+    update(prev => ({
+      ...prev,
+      apuntes: {
+        ...prev.apuntes,
+        pagosClub: (prev.apuntes?.pagosClub || []).map(p => p.id === id ? { ...p, reportado: !p.reportado } : p),
+      },
+    }));
+  }
+
+  function deletePagoClub(id) {
+    update(prev => ({
+      ...prev,
+      apuntes: {
+        ...prev.apuntes,
+        pagosClub: (prev.apuntes?.pagosClub || []).filter(p => p.id !== id),
+      },
+    }));
+  }
+
+  function addNota(nota) {
+    update(prev => ({
+      ...prev,
+      apuntes: {
+        ...prev.apuntes,
+        notas: [{ ...nota, id: Date.now(), fecha: new Date().toISOString() }, ...(prev.apuntes?.notas || [])],
+      },
+    }));
+  }
+
+  function deleteNota(id) {
+    update(prev => ({
+      ...prev,
+      apuntes: {
+        ...prev.apuntes,
+        notas: (prev.apuntes?.notas || []).filter(n => n.id !== id),
+      },
+    }));
+  }
+
+  function addDeuda(deuda) {
+    update(prev => ({ ...prev, deudas: [{ ...deuda, id: Date.now(), abonos: [] }, ...(prev.deudas || [])] }));
+  }
+
+  function deleteDeuda(id) {
+    update(prev => ({ ...prev, deudas: (prev.deudas || []).filter(d => d.id !== id) }));
+  }
+
+  function addAbono(deudaId, abono) {
+    update(prev => ({
+      ...prev,
+      deudas: (prev.deudas || []).map(d =>
+        d.id === deudaId
+          ? { ...d, abonos: [...(d.abonos || []), { ...abono, id: Date.now() }] }
+          : d
+      ),
+    }));
+  }
+
+  function deleteAbono(deudaId, abonoId) {
+    update(prev => ({
+      ...prev,
+      deudas: (prev.deudas || []).map(d =>
+        d.id === deudaId
+          ? { ...d, abonos: (d.abonos || []).filter(a => a.id !== abonoId) }
+          : d
+      ),
+    }));
   }
 
   // Recuperar desde backup local
@@ -1115,6 +1236,9 @@ export function FinanzasProvider({ children }) {
       liquidarTC,
       savePerfilIngresos, saveNombreUsuario,
       addMetaPersonalizada, updateMetaPersonalizada, deleteMetaPersonalizada,
+      addDeuda, deleteDeuda, addAbono, deleteAbono,
+      addPagoClub, togglePagoClub, deletePagoClub,
+      addNota, deleteNota,
     }}>
       {children}
     </FinanzasContext.Provider>

@@ -4,6 +4,8 @@ export function computeMetrics(transacciones, mes) {
   // Excluir 'Pago TC' de ingresos y egresos base — son transferencias internas
   const ing  = txs.filter(t => t.movimiento === 'Ingreso' && t.categoria !== 'Pago TC').reduce((s, t) => s + Math.abs(t.total), 0);
   const eg   = txs.filter(t => t.movimiento === 'Egreso'  && t.categoria !== 'Pago TC').reduce((s, t) => s + Math.abs(t.total), 0);
+  // Ingresos ya recibidos (excluye pendientes y futuros)
+  const ingRecibidos = txs.filter(t => t.movimiento === 'Ingreso' && t.categoria !== 'Pago TC' && t.estado !== 'pendiente' && !t.esFuturo).reduce((s, t) => s + Math.abs(t.total), 0);
 
   // TC expenses are excluded from cash balance — they're debt until paid
   const tcEg   = txs.filter(t => t.movimiento === 'Egreso' && t.cuenta === 'T.C').reduce((s, t) => s + Math.abs(t.total), 0);
@@ -19,6 +21,8 @@ export function computeMetrics(transacciones, mes) {
   const ahorroReal = txs.filter(t => t.categoria === 'Ahorro').reduce((s, t) => s + Math.abs(t.total), 0);
   const invReal    = txs.filter(t => t.categoria === 'Inversion').reduce((s, t) => s + Math.abs(t.total), 0);
   const tasaAhorro = ing > 0 ? ahorroReal / ing : 0;
+  // Balance del mes: ingresos recibidos vs todos los egresos (incluyendo TC)
+  const flujoMes = ingRecibidos - eg;
   const nequiIng = txs.filter(t => t.movimiento === 'Ingreso' && t.cuenta === 'Nequi').reduce((s, t) => s + Math.abs(t.total), 0);
   const nequiEg  = txs.filter(t => t.movimiento === 'Egreso'  && t.cuenta === 'Nequi').reduce((s, t) => s + Math.abs(t.total), 0);
   const otrosEg  = egCash - nequiEg;
@@ -38,5 +42,5 @@ export function computeMetrics(transacciones, mes) {
     byIngresoCat[t.categoria] = (byIngresoCat[t.categoria] || 0) + Math.abs(t.total);
   });
   const hasData = ing > 0 || eg > 0;
-  return { ing, eg, egCash, tcEg, pagoTC, neto: netoCash, fijos, vars, ahorroReal, invReal, tasaAhorro, nequiIng, nequiEg, otrosEg, byCat, byCatAll, byIngresoCat, hasData };
+  return { ing, eg, egCash, tcEg, pagoTC, neto: netoCash, flujoMes, ingRecibidos, fijos, vars, ahorroReal, invReal, tasaAhorro, nequiIng, nequiEg, otrosEg, byCat, byCatAll, byIngresoCat, hasData };
 }

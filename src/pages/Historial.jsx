@@ -250,9 +250,34 @@ export default function Historial() {
                       </Box>
                     </Box>
 
-                    {/* Edición inline de cuenta */}
+                    {/* Edición inline */}
                     <Collapse in={isEditing}>
                       <Box sx={{ px: 2, pb: 1.5, pt: 0 }}>
+                        {/* Fecha */}
+                        <Typography sx={{ fontSize: 11, fontWeight: 700, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+                          Fecha
+                        </Typography>
+                        <Box
+                          component="input"
+                          type="date"
+                          value={t.fecha?.split('T')[0] || ''}
+                          onChange={e => {
+                            const newDate = e.target.value;
+                            if (!newDate) return;
+                            updateTransaccion(t.id, {
+                              fecha: newDate + 'T12:00:00',
+                              mes: 'M' + parseInt(newDate.slice(5, 7)),
+                            });
+                            showToast('Fecha actualizada', 'success');
+                          }}
+                          sx={{
+                            mb: 1.5, px: 1.25, py: 0.75, borderRadius: '10px',
+                            border: `1px solid ${BORDER}`, bgcolor: '#F9FAFB',
+                            fontSize: 13, fontFamily: 'inherit', color: T1,
+                            outline: 'none', width: '100%', boxSizing: 'border-box',
+                            '&:focus': { borderColor: GREEN },
+                          }}
+                        />
                         <Typography sx={{ fontSize: 11, fontWeight: 700, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
                           {esIngreso ? '¿A qué cuenta entró?' : '¿Con qué pagaste?'}
                         </Typography>
