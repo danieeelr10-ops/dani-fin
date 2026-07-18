@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Box, Typography } from '@mui/material'
 import { useFinanzas } from 'src/context/FinanzasContext'
 import { computeMetrics } from 'src/utils/metrics'
-import { computeDisponibleHoy, computePorCobrar, computeProximosPagos, computeAlertas } from 'src/utils/cashflow'
+import { computeDisponibleHoy, computeProximosPagos, computeAlertas } from 'src/utils/cashflow'
 import AlertasBanner from 'src/components/AlertasBanner'
 import { formatMoney, formatMoneyShort, getMesActual } from 'src/utils/format'
 import { CAT_ICONS, CAT_COLORS, MES_NAMES, MESES } from 'src/constants'
@@ -90,22 +90,11 @@ export default function Inicio() {
   const hayCarryOver = carryOver !== 0
   const esDeuda      = carryOver < 0
 
-  // Cobros pendientes del mes activo (para mostrar en confirmación de cierre)
-  const pendingCobrosCount = useMemo(() =>
-    (state.transacciones || []).filter(t =>
-      t.mes === mes &&
-      t.movimiento === 'Ingreso' &&
-      (t.esFuturo === true || t.estado === 'pendiente' || t.estado === 'parcial')
-    ).length,
-    [state.transacciones, mes]
-  )
-
   // Flujo de caja real (después de carryOver para poder usarlo)
   const disponibleHoy = useMemo(
     () => computeDisponibleHoy(state.transacciones || [], mes, carryOver),
     [state.transacciones, mes, carryOver]
   )
-  const porCobrar     = useMemo(() => computePorCobrar(state.transacciones || []),                    [state.transacciones])
   const proximosPagos = useMemo(() => computeProximosPagos(state.transacciones || []),                [state.transacciones])
   const alertas       = useMemo(() => computeAlertas(state.transacciones || [], mes, carryOver),      [state.transacciones, mes, carryOver])
 
@@ -367,7 +356,6 @@ export default function Inicio() {
                       {cierreMes.carry_over_amount >= 0
                         ? `Traslada ${formatMoneyShort(cierreMes.carry_over_amount)} al siguiente mes`
                         : `Deuda de ${formatMoneyShort(Math.abs(cierreMes.carry_over_amount))} trasladada`}
-                      {cierreMes.cobros_moved > 0 && ` · ${cierreMes.cobros_moved} cobro${cierreMes.cobros_moved > 1 ? 's' : ''} pendiente${cierreMes.cobros_moved > 1 ? 's' : ''} movido${cierreMes.cobros_moved > 1 ? 's' : ''}`}
                     </Typography>
                   </Box>
                   <Typography
@@ -396,11 +384,6 @@ export default function Inicio() {
                           ? ` → se trasladan ${formatMoney(balance)} como ahorro`
                           : ` → se traslada deuda de ${formatMoney(Math.abs(balance))}`}
                       </Typography>
-                      {pendingCobrosCount > 0 && (
-                        <Typography sx={{ fontSize: 12, color: T1 }}>
-                          📋 <strong>{pendingCobrosCount} cobro{pendingCobrosCount > 1 ? 's' : ''} pendiente{pendingCobrosCount > 1 ? 's' : ''}</strong> → se mueven automáticamente a {MES_NAMES[parseInt(mes.replace('M',''))] || 'siguiente mes'}
-                        </Typography>
-                      )}
                       <Box sx={{ display: 'flex', gap: 1 }}>
                         <Box
                           onClick={() => { closeMonth(mes); setConfirmCierre(false) }}

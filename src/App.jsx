@@ -21,7 +21,6 @@ import Habitos from './pages/Habitos';
 import Seed from './pages/Seed';
 import Inversiones from './pages/Inversiones';
 import FlujoDeCaja from './pages/FlujoDeCaja';
-import Cobros from './pages/Cobros';
 import Reportes from './pages/Reportes';
 import Deudas from './pages/Deudas';
 import Apuntes from './pages/Apuntes';
@@ -72,7 +71,6 @@ function AuthenticatedApp() {
             <Route path="/config"       element={<Configuracion />} />
             <Route path="/inversiones" element={<Inversiones />} />
             <Route path="/flujo"       element={<FlujoDeCaja />} />
-            <Route path="/cobros"      element={<Cobros />} />
             <Route path="/reportes"    element={<Reportes />} />
             <Route path="/deudas"      element={<Deudas />} />
             <Route path="/apuntes"     element={<Apuntes />} />
