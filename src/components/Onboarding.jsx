@@ -37,7 +37,14 @@ const PERFILES = [
 ]
 
 export function needsOnboarding(state) {
-  return !localStorage.getItem(ONBOARDING_KEY) && !state.nombreUsuario
+  if (localStorage.getItem(ONBOARDING_KEY)) return false
+  if (state.nombreUsuario) return false
+  // Usuario existente con datos — marcar como hecho y no interrumpir
+  if ((state.transacciones || []).length > 0 || (state.metas || []).length > 0) {
+    localStorage.setItem(ONBOARDING_KEY, '1')
+    return false
+  }
+  return true
 }
 
 export default function Onboarding() {
