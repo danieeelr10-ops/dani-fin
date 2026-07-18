@@ -36,14 +36,19 @@ const PERFILES = [
   },
 ]
 
-export function needsOnboarding(state) {
+export function needsOnboarding(state, user) {
   if (localStorage.getItem(ONBOARDING_KEY)) return false
   if (state.nombreUsuario) return false
-  // Usuario existente con datos — marcar como hecho y no interrumpir
-  if ((state.transacciones || []).length > 0 || (state.metas || []).length > 0) {
-    localStorage.setItem(ONBOARDING_KEY, '1')
-    return false
+
+  // Usuario con cuenta de más de 5 minutos → existente, saltar onboarding
+  if (user?.created_at) {
+    const isNew = Date.now() - new Date(user.created_at).getTime() < 5 * 60 * 1000
+    if (!isNew) {
+      localStorage.setItem(ONBOARDING_KEY, '1')
+      return false
+    }
   }
+
   return true
 }
 

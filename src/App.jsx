@@ -51,8 +51,9 @@ function AppRoutes() {
 
 function AuthenticatedApp() {
   const { state } = useFinanzas();
+  const { user } = useAuth();
 
-  if (needsOnboarding(state)) return <Onboarding />;
+  if (needsOnboarding(state, user)) return <Onboarding />;
 
   return (
     <Layout>
