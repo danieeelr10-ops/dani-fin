@@ -2,9 +2,10 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
 import { theme } from './theme';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { FinanzasProvider } from './context/FinanzasContext';
+import { FinanzasProvider, useFinanzas } from './context/FinanzasContext';
 import { SnackbarProvider } from './context/SnackbarContext';
 import Layout from './components/Layout';
+import Onboarding, { needsOnboarding } from './components/Onboarding';
 import Login from './pages/Login';
 import Inicio from './pages/Inicio';
 import Registrar from './pages/Registrar';
@@ -43,8 +44,20 @@ function AppRoutes() {
   return (
     <FinanzasProvider>
       <SnackbarProvider>
-        <Layout>
-          <Routes>
+        <AuthenticatedApp />
+      </SnackbarProvider>
+    </FinanzasProvider>
+  );
+}
+
+function AuthenticatedApp() {
+  const { state } = useFinanzas();
+
+  if (needsOnboarding(state)) return <Onboarding />;
+
+  return (
+    <Layout>
+      <Routes>
             <Route path="/" element={<Navigate to="/inicio" replace />} />
             <Route path="/inicio"      element={<Inicio />} />
             <Route path="/registro"    element={<Registrar />} />
@@ -67,9 +80,7 @@ function AppRoutes() {
             <Route path="/ahorro"      element={<Ahorro />} />
             <Route path="/seed"        element={<Seed />} />
           </Routes>
-        </Layout>
-      </SnackbarProvider>
-    </FinanzasProvider>
+    </Layout>
   );
 }
 

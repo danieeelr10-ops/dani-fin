@@ -156,7 +156,8 @@ export default function Inicio() {
   // Proyección fin de mes: disponible hoy + ingresos presupuestados aún no recibidos − gastos que faltan pagar
   const ingresosPendientes = Math.max(ingPres - ingRecibidoPresup, 0)
   const gastosPendientes = Math.max(egPresPlan - metrics.eg, 0)
-  const proyeccionFinMes = disponibleHoy + ingresosPendientes - gastosPendientes
+  const tcPorPagar = Math.max((metrics.tcEg || 0) - (metrics.pagoTC || 0), 0)
+  const proyeccionFinMes = disponibleHoy + ingresosPendientes - gastosPendientes - tcPorPagar
   const proyColor = proyeccionFinMes < 0 ? RED : proyeccionFinMes < margenPlan * 0.8 ? '#F59E0B' : GREEN
   const difVsPlan = proyeccionFinMes - margenPlan
 
@@ -555,6 +556,7 @@ export default function Inicio() {
                 { label: 'Disponible hoy', value: disponibleHoy, sign: '' },
                 { label: '+ Por recibir', value: ingresosPendientes, sign: '+' },
                 { label: '− Por pagar', value: gastosPendientes, sign: '−' },
+                ...(tcPorPagar > 0 ? [{ label: '− Pago TC pendiente', value: tcPorPagar, sign: '−' }] : []),
               ].map(({ label, value, sign }) => (
                 <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Typography sx={{ fontSize: 12, color: T2 }}>{label}</Typography>
