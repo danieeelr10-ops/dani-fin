@@ -36,19 +36,16 @@ export const CUENTAS = ['Nequi','T.C','Daviplata','Nu','Efectivo'];
 
 export const DEFAULT_METAS = {
   M1:{ahorro:0,inversion:0}, M2:{ahorro:0,inversion:0},
-  M3:{ahorro:1000000,inversion:0}, M4:{ahorro:500000,inversion:0},
-  M5:{ahorro:500000,inversion:0}, M6:{ahorro:500000,inversion:0},
-  M7:{ahorro:500000,inversion:0}, M8:{ahorro:500000,inversion:0},
-  M9:{ahorro:500000,inversion:0}, M10:{ahorro:500000,inversion:0},
-  M11:{ahorro:500000,inversion:0}, M12:{ahorro:500000,inversion:0},
+  M3:{ahorro:0,inversion:0}, M4:{ahorro:0,inversion:0},
+  M5:{ahorro:0,inversion:0}, M6:{ahorro:0,inversion:0},
+  M7:{ahorro:0,inversion:0}, M8:{ahorro:0,inversion:0},
+  M9:{ahorro:0,inversion:0}, M10:{ahorro:0,inversion:0},
+  M11:{ahorro:0,inversion:0}, M12:{ahorro:0,inversion:0},
 };
 
 export const DEFAULT_PRESUPUESTO = {};
 
-export const DEFAULT_INVERSIONES = [
-  {id:1,activo:'NVDA',fechaCompra:'2026-01-19',montoUSD:100,cantidad:0.52667,precioCompra:189.87,precioActual:191.52},
-  {id:2,activo:'VOO', fechaCompra:'2026-01-19',montoUSD:200,cantidad:0.31272,precioCompra:639.55,precioActual:639.69},
-];
+export const DEFAULT_INVERSIONES = [];
 
 // ── Voz ──────────────────────────────────────────────────
 export const PALABRAS_RUIDO = /\b(pague|pagar|gaste|gasté|compre|compré|pedí|pedi|fui|comi|almorcé|cene|cené|me cobro|me cobró|me cargaron|cargue|cargué|hay que|queda|quedo|quedó|le di|le pague|le pagué|le mande|mandé|puse|guarde|guardé|consigné|saque|saqué|ingreso|ingresó|recibí|recibi|me pagaron|me entraron|entraron|llego|llegó|abonaron|con la|con el|con mi|desde|para|en el|en la|en los|en las|al|a la|a los|por|del|de la|de los|hoy|ayer|esta mañana|esta tarde|el|la|los|las|un|una|que|como|pero|y|o|de|a)\b/gi;

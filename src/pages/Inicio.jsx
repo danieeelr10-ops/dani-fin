@@ -21,6 +21,104 @@ const BORDER  = '#E5E7EB'
 // ── Helpers ───────────────────────────────────────────────────
 function ls(key) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null } catch { return null } }
 
+const GUIA_KEY = 'dani_fin_guia_dismissed'
+
+function PrimerosPasos({ state, navigate }) {
+  const [dismissed, setDismissed] = useState(() => !!localStorage.getItem(GUIA_KEY))
+
+  const tieneCuentas    = Object.keys(state.saldosIniciales || {}).length > 0
+  const tieneMovimiento = (state.transacciones || []).length > 0
+  const tienePresupuesto = Object.values(state.presupuestos || {}).some(m => Object.values(m || {}).some(v => v > 0))
+
+  const pasos = [
+    { done: true,            label: 'Crear tu cuenta',                         path: null },
+    { done: tieneCuentas,    label: 'Configurar tus cuentas y saldos',          path: '/config' },
+    { done: tieneMovimiento, label: 'Registrar tu primer ingreso o gasto',      path: '/registro' },
+    { done: tienePresupuesto,label: 'Configurar tu presupuesto del mes',        path: '/presupuesto' },
+  ]
+
+  const completados = pasos.filter(p => p.done).length
+  const total       = pasos.length
+  const todoListo   = completados === total
+
+  if (dismissed) return null
+
+  function dismiss() {
+    localStorage.setItem(GUIA_KEY, '1')
+    setDismissed(true)
+  }
+
+  return (
+    <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 2, border: `1px solid ${BORDER}` }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1.75 }}>
+        <Box>
+          <Typography sx={{ fontSize: 14, fontWeight: 700, color: T1 }}>
+            {todoListo ? '🎉 ¡Todo listo!' : '🚀 Primeros pasos'}
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: T2, mt: 0.25 }}>
+            {todoListo
+              ? 'Ya tienes todo configurado. ¡Empieza a trackear tu plata!'
+              : `${completados} de ${total} completados`}
+          </Typography>
+        </Box>
+        <Box onClick={dismiss} sx={{ cursor: 'pointer', color: T2, p: 0.25, '&:hover': { color: T1 } }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </Box>
+      </Box>
+
+      {/* Barra de progreso */}
+      <Box sx={{ height: 4, borderRadius: '99px', bgcolor: BORDER, mb: 2, overflow: 'hidden' }}>
+        <Box sx={{ height: '100%', borderRadius: '99px', bgcolor: GREEN, width: `${(completados / total) * 100}%`, transition: 'width .4s' }} />
+      </Box>
+
+      {/* Pasos */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {pasos.map((paso, i) => (
+          <Box key={i}
+            onClick={paso.path && !paso.done ? () => navigate(paso.path) : undefined}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 1.5,
+              p: '10px 12px', borderRadius: '10px',
+              cursor: paso.path && !paso.done ? 'pointer' : 'default',
+              bgcolor: paso.done ? 'rgba(0,167,111,0.05)' : '#FAFAFA',
+              border: '1px solid',
+              borderColor: paso.done ? 'rgba(0,167,111,0.15)' : BORDER,
+              '&:hover': paso.path && !paso.done ? { bgcolor: '#F3F4F6' } : {},
+              transition: 'all .15s',
+            }}
+          >
+            {/* Check / número */}
+            <Box sx={{
+              width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              bgcolor: paso.done ? GREEN : BORDER,
+            }}>
+              {paso.done
+                ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                : <Typography sx={{ fontSize: 10, fontWeight: 700, color: T2 }}>{i + 1}</Typography>
+              }
+            </Box>
+
+            <Typography sx={{ fontSize: 13, fontWeight: paso.done ? 500 : 600, color: paso.done ? T2 : T1, flex: 1,
+              textDecoration: paso.done ? 'line-through' : 'none' }}>
+              {paso.label}
+            </Typography>
+
+            {paso.path && !paso.done && (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T2} strokeWidth="2">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            )}
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  )
+}
+
 function getGreeting() {
   const h = new Date().getHours()
   if (h < 12) return 'Buenos días'
@@ -235,6 +333,9 @@ export default function Inicio() {
 
         {/* ── Alertas ── */}
         <AlertasBanner alertas={alertas} />
+
+        {/* ── Guía primeros pasos (solo usuarios nuevos) ── */}
+        <PrimerosPasos state={state} navigate={navigate} />
 
         {/* ── Hero: Disponible HOY ── */}
         <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 2 }}>
