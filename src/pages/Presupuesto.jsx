@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Card, Divider,
   alpha, Grid, Collapse,
@@ -517,10 +518,147 @@ function ProgresoTable({ rows, isIngreso = false }) {
   );
 }
 
+// ── Guía para usuarios nuevos ──────────────────────────────
+const GUIA_PRESUP_KEY = 'dani_fin_presup_guide_done'
+
+const PASOS_GUIA = [
+  {
+    id: 'ingresos',
+    emoji: '💰',
+    titulo: 'Paso 1 — Configura tus ingresos',
+    desc: 'Dile a la app cuánto vas a ganar este mes. Toca cualquier categoría de ingresos de la lista de abajo (Sueldo, Freelance, etc.) y pon el monto esperado.',
+    tip: 'Si tu ingreso varía, pon un estimado conservador.',
+    check: (presupMes, catIngreso) => catIngreso.some(c => (presupMes[c] || 0) > 0),
+  },
+  {
+    id: 'fijos',
+    emoji: '🏠',
+    titulo: 'Paso 2 — Gastos fijos',
+    desc: 'Son los que pagas igual cada mes: arriendo, servicios, salud, celular. Toca cada categoría en "Egresos fijos" y define cuánto presupuestas.',
+    tip: 'Son fáciles de estimar porque casi no cambian mes a mes.',
+    check: (presupMes, _, catFijo) => catFijo.some(c => (presupMes[c] || 0) > 0),
+  },
+  {
+    id: 'variables',
+    emoji: '🛒',
+    titulo: 'Paso 3 — Gastos variables',
+    desc: 'Mercado, transporte, salidas, entretenimiento. Pon un límite realista para cada uno según cómo gastas normalmente.',
+    tip: 'El objetivo: que Ingresos > Egresos para que siempre quede margen.',
+    check: (presupMes, _, __, catVariable) => catVariable.some(c => (presupMes[c] || 0) > 0),
+  },
+]
+
+function GuiaPresupuesto({ presupMes, catIngreso, catFijo, catVariable, navigate }) {
+  const [visible, setVisible] = useState(() => !localStorage.getItem(GUIA_PRESUP_KEY))
+  const [pasoActivo, setPasoActivo] = useState(0)
+
+  const doneArr = PASOS_GUIA.map(p => p.check(presupMes, catIngreso, catFijo, catVariable))
+  const completados = doneArr.filter(Boolean).length
+  const todoListo   = completados === PASOS_GUIA.length
+
+  // Avanzar automáticamente al siguiente paso pendiente
+  useEffect(() => {
+    const primero = doneArr.findIndex(d => !d)
+    if (primero !== -1) setPasoActivo(primero)
+    else setPasoActivo(PASOS_GUIA.length - 1)
+  }, [doneArr.join()])
+
+  if (!visible) return null
+
+  function dismiss() {
+    localStorage.setItem(GUIA_PRESUP_KEY, '1')
+    setVisible(false)
+  }
+
+  const paso = PASOS_GUIA[pasoActivo]
+
+  return (
+    <Box sx={{ bgcolor: '#fff', borderRadius: '16px', border: `1.5px solid ${GREEN}22`, boxShadow: `0 0 0 4px ${GREEN}08`, mb: 2.5, overflow: 'hidden' }}>
+      {/* Header */}
+      <Box sx={{ px: 2, pt: 1.75, pb: 1.25, display: 'flex', alignItems: 'center', gap: 1.5, borderBottom: `1px solid ${BORDER}` }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#111318' }}>
+            📋 Configura tu presupuesto
+          </Typography>
+          <Typography sx={{ fontSize: 11, color: T2, mt: 0.15 }}>
+            {todoListo ? '¡Listo! Tu presupuesto está configurado.' : `${completados} de ${PASOS_GUIA.length} secciones listas`}
+          </Typography>
+        </Box>
+        {/* Dots de progreso */}
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          {PASOS_GUIA.map((p, i) => (
+            <Box key={p.id} onClick={() => setPasoActivo(i)} sx={{
+              width: doneArr[i] ? 20 : 8, height: 8, borderRadius: '99px', cursor: 'pointer',
+              bgcolor: doneArr[i] ? GREEN : i === pasoActivo ? '#111318' : BORDER,
+              transition: 'all .25s',
+            }} />
+          ))}
+        </Box>
+      </Box>
+
+      {/* Paso activo */}
+      <Box sx={{ px: 2, py: 1.75 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, mb: 1 }}>
+          <Box sx={{
+            width: 36, height: 36, borderRadius: '10px', flexShrink: 0,
+            bgcolor: doneArr[pasoActivo] ? `${GREEN}18` : '#F3F4F6',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+          }}>
+            {doneArr[pasoActivo] ? '✅' : paso.emoji}
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#111318', mb: 0.4 }}>
+              {paso.titulo}
+            </Typography>
+            <Typography sx={{ fontSize: 12, color: T2, lineHeight: 1.55 }}>
+              {paso.desc}
+            </Typography>
+          </Box>
+        </Box>
+
+        {/* Tip */}
+        <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-start', px: 1.25, py: 0.875, borderRadius: '8px', bgcolor: '#FFFBEB', border: '1px solid #FEF3C7', mb: 1.5 }}>
+          <Typography sx={{ fontSize: 13, lineHeight: 1 }}>💡</Typography>
+          <Typography sx={{ fontSize: 11, color: '#92400E', lineHeight: 1.5 }}>{paso.tip}</Typography>
+        </Box>
+
+        {/* Acciones */}
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          {!todoListo && pasoActivo < PASOS_GUIA.length - 1 && (
+            <Box onClick={() => setPasoActivo(p => p + 1)} sx={{
+              display: 'flex', alignItems: 'center', gap: 0.5,
+              px: 1.5, py: 0.75, borderRadius: '8px', cursor: 'pointer',
+              bgcolor: '#F3F4F6', fontSize: 12, fontWeight: 600, color: T2,
+              '&:hover': { bgcolor: BORDER },
+            }}>
+              Ver siguiente paso
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </Box>
+          )}
+          {todoListo && (
+            <Box onClick={() => { dismiss(); navigate('/inicio') }} sx={{
+              display: 'flex', alignItems: 'center', gap: 0.5,
+              px: 1.75, py: 0.875, borderRadius: '10px', cursor: 'pointer',
+              bgcolor: GREEN, color: '#fff', fontSize: 13, fontWeight: 700,
+              '&:hover': { opacity: 0.9 },
+            }}>
+              ¡Listo! Ir al inicio →
+            </Box>
+          )}
+          <Box onClick={dismiss} sx={{ ml: 'auto', fontSize: 11, color: T2, cursor: 'pointer', '&:hover': { color: '#111318' } }}>
+            Saltar guía
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  )
+}
+
 // ── Main ───────────────────────────────────────────────────
 export default function Presupuesto() {
   const { state, savePresupuestoMes, copiarPresupuesto, savePlantilla, applyPlantilla, addPresupuestoItem, deletePresupuestoItem, updatePresupuestoItem, savePresupuestoTarjetas, pagarPresupuestoItem, despagarPresupuestoItem, deleteTransaccion, mesActivo, setMesActivo } = useFinanzas();
   const { showSnackbar } = useSnackbar();
+  const navigate = useNavigate();
   const mes = mesActivo;
   const setMes = setMesActivo;
   const [modo, setModo] = useState('configurar');
@@ -614,6 +752,15 @@ export default function Presupuesto() {
 
     return (
       <Box>
+        {/* Guía primeros pasos presupuesto */}
+        <GuiaPresupuesto
+          presupMes={presupuestoMes}
+          catIngreso={catIngreso}
+          catFijo={catFijo}
+          catVariable={catVariable}
+          navigate={navigate}
+        />
+
         {/* KPIs */}
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, mb: 2 }}>
           {[
