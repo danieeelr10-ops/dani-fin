@@ -37,11 +37,11 @@ const MINI_TUTORIALES = [
     id: 'config',
     emoji: '⚙️',
     label: 'Configura tu cuenta',
-    desc: 'Antes de empezar, dile a la app cómo está organizado tu dinero: qué cuentas tienes (Nequi, Bancolombia, efectivo), si usas tarjeta de crédito y cuánto tienes disponible hoy en cada una.',
+    desc: 'Antes de empezar, dile a la app cómo está organizado tu dinero: qué cuentas tienes (Nequi, Bancolombia, efectivo) y cuánto tienes disponible hoy en cada una.',
     tips: [
       'Agrega todas las cuentas donde guardas plata',
-      'Si usas tarjeta de crédito, agrégala aquí también',
       'Pon el saldo actual de cada cuenta para que los cálculos sean correctos',
+      'Puedes agregar cuentas personalizadas si no están en la lista',
     ],
     path: '/config',
     accion: 'Ir a Configuración',
