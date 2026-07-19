@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
 import { theme } from './theme';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -65,8 +65,23 @@ function AppRoutes() {
 
 function AuthenticatedApp() {
   const [showOnboarding, setShowOnboarding] = useState(() => needsOnboarding())
+  const pendingNav = useRef(null)
+  const navigate   = useNavigate()
 
-  if (showOnboarding) return <Onboarding onComplete={() => setShowOnboarding(false)} />;
+  // Navega DESPUÉS de que el Layout y las Routes están montados
+  useEffect(() => {
+    if (!showOnboarding && pendingNav.current) {
+      navigate(pendingNav.current, { replace: true })
+      pendingNav.current = null
+    }
+  }, [showOnboarding])
+
+  if (showOnboarding) return (
+    <Onboarding onComplete={(path) => {
+      pendingNav.current = path || '/inicio'
+      setShowOnboarding(false)
+    }} />
+  );
 
   return (
     <Layout>

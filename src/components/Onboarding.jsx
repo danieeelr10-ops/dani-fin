@@ -106,8 +106,7 @@ export default function Onboarding({ onComplete }) {
     }
 
     localStorage.setItem(ONBOARDING_KEY, '1')
-    navigate('/presupuesto')
-    onComplete?.()
+    onComplete?.('/presupuesto')
   }
 
   function skip() {
