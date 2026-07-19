@@ -23,22 +23,105 @@ function ls(key) { try { const v = localStorage.getItem(key); return v ? JSON.pa
 
 const GUIA_KEY = 'dani_fin_guia_dismissed'
 
+const MINI_TUTORIALES = [
+  {
+    id: 'cuenta',
+    emoji: '✅',
+    label: 'Crear tu cuenta',
+    desc: '¡Ya lo hiciste! Tu cuenta está lista.',
+    tips: [],
+    path: null,
+    accion: null,
+  },
+  {
+    id: 'registro',
+    emoji: '💸',
+    label: 'Registrar gastos e ingresos',
+    desc: 'Cada vez que gastes o recibas plata, regístralo aquí. En segundos sabrás exactamente a dónde va tu dinero.',
+    tips: [
+      'Usa el botón verde [+] en la barra inferior para registros rápidos',
+      'Escoge la categoría correcta para que tu análisis sea más preciso',
+      'Puedes registrar gastos pasados cambiando la fecha',
+    ],
+    path: '/registro',
+    accion: 'Ir a Registrar',
+  },
+  {
+    id: 'presupuesto',
+    emoji: '📊',
+    label: 'Configurar tu presupuesto',
+    desc: 'Define cuánto quieres gastar en cada categoría al mes. La app te avisa cuando te estás pasando.',
+    tips: [
+      'Configúralo al inicio de cada mes',
+      'Empieza por los gastos fijos (arriendo, servicios)',
+      'Puedes desglosar cada categoría en conceptos específicos',
+    ],
+    path: '/presupuesto',
+    accion: 'Ir a Presupuesto',
+  },
+  {
+    id: 'historial',
+    emoji: '📋',
+    label: 'Revisar tu historial',
+    desc: 'Ve todos tus movimientos en un solo lugar. Filtra por categoría, cuenta o fecha para encontrar cualquier transacción.',
+    tips: [
+      'Filtra por categoría para ver en qué gastas más',
+      'Puedes editar o eliminar cualquier movimiento',
+      'El historial guarda todos tus meses anteriores',
+    ],
+    path: '/historial',
+    accion: 'Ver Historial',
+  },
+  {
+    id: 'tc',
+    emoji: '💳',
+    label: 'Tarjeta de crédito (T.C)',
+    desc: 'Registra tus compras con tarjeta y la app calcula automáticamente cuánto debes pagar al corte del mes.',
+    tips: [
+      'Agrega tu tarjeta primero en Configuración',
+      'Cada compra con T.C queda registrada separada del efectivo',
+      'El resumen de T.C te muestra el total a pagar este mes',
+    ],
+    path: '/tc',
+    accion: 'Ver T.C',
+  },
+  {
+    id: 'deudas-ahorro',
+    emoji: '🎯',
+    label: 'Deudas y Ahorro',
+    desc: 'En Deudas lleva el control de lo que debes o te deben. En Ahorro define metas y ve cuánto llevas acumulado.',
+    tips: [
+      'Registra deudas con fecha límite para no olvidarlas',
+      'Las metas de ahorro te muestran el progreso mes a mes',
+      'Puedes tener varias metas al mismo tiempo',
+    ],
+    path: '/ahorro',
+    accion: 'Ver Ahorro',
+  },
+]
+
 function PrimerosPasos({ state, navigate }) {
   const [dismissed, setDismissed] = useState(() => !!localStorage.getItem(GUIA_KEY))
+  const [abierto,   setAbierto]   = useState(null) // id del paso abierto
 
-  const tieneCuentas    = Object.keys(state.saldosIniciales || {}).length > 0
-  const tieneMovimiento = (state.transacciones || []).length > 0
+  const tieneCuentas     = Object.keys(state.saldosIniciales || {}).length > 0
+  const tieneMovimiento  = (state.transacciones || []).length > 0
   const tienePresupuesto = Object.values(state.presupuestos || {}).some(m => Object.values(m || {}).some(v => v > 0))
+  const tieneHistorial   = tieneMovimiento
+  const tieneTC          = (state.tarjetas || []).length > 0
+  const tieneAhorro      = Object.values(state.metas || {}).some(m => (m.ahorro || 0) > 0) || (state.metasPersonalizadas || []).length > 0
 
-  const pasos = [
-    { done: true,            label: 'Crear tu cuenta',                         path: null },
-    { done: tieneCuentas,    label: 'Configurar tus cuentas y saldos',          path: '/config' },
-    { done: tieneMovimiento, label: 'Registrar tu primer ingreso o gasto',      path: '/registro' },
-    { done: tienePresupuesto,label: 'Configurar tu presupuesto del mes',        path: '/presupuesto' },
-  ]
+  const doneMap = {
+    cuenta:         true,
+    registro:       tieneMovimiento,
+    presupuesto:    tienePresupuesto,
+    historial:      tieneHistorial,
+    tc:             tieneTC,
+    'deudas-ahorro': tieneAhorro,
+  }
 
-  const completados = pasos.filter(p => p.done).length
-  const total       = pasos.length
+  const completados = Object.values(doneMap).filter(Boolean).length
+  const total       = MINI_TUTORIALES.length
   const todoListo   = completados === total
 
   if (dismissed) return null
@@ -48,72 +131,135 @@ function PrimerosPasos({ state, navigate }) {
     setDismissed(true)
   }
 
+  function toggle(id) {
+    setAbierto(prev => prev === id ? null : id)
+  }
+
   return (
-    <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 2, border: `1px solid ${BORDER}` }}>
+    <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, mb: 2, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1.75 }}>
-        <Box>
-          <Typography sx={{ fontSize: 14, fontWeight: 700, color: T1 }}>
-            {todoListo ? '🎉 ¡Todo listo!' : '🚀 Primeros pasos'}
-          </Typography>
-          <Typography sx={{ fontSize: 12, color: T2, mt: 0.25 }}>
-            {todoListo
-              ? 'Ya tienes todo configurado. ¡Empieza a trackear tu plata!'
-              : `${completados} de ${total} completados`}
-          </Typography>
-        </Box>
-        <Box onClick={dismiss} sx={{ cursor: 'pointer', color: T2, p: 0.25, '&:hover': { color: T1 } }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </Box>
-      </Box>
-
-      {/* Barra de progreso */}
-      <Box sx={{ height: 4, borderRadius: '99px', bgcolor: BORDER, mb: 2, overflow: 'hidden' }}>
-        <Box sx={{ height: '100%', borderRadius: '99px', bgcolor: GREEN, width: `${(completados / total) * 100}%`, transition: 'width .4s' }} />
-      </Box>
-
-      {/* Pasos */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {pasos.map((paso, i) => (
-          <Box key={i}
-            onClick={paso.path && !paso.done ? () => navigate(paso.path) : undefined}
-            sx={{
-              display: 'flex', alignItems: 'center', gap: 1.5,
-              p: '10px 12px', borderRadius: '10px',
-              cursor: paso.path && !paso.done ? 'pointer' : 'default',
-              bgcolor: paso.done ? 'rgba(0,167,111,0.05)' : '#FAFAFA',
-              border: '1px solid',
-              borderColor: paso.done ? 'rgba(0,167,111,0.15)' : BORDER,
-              '&:hover': paso.path && !paso.done ? { bgcolor: '#F3F4F6' } : {},
-              transition: 'all .15s',
-            }}
-          >
-            {/* Check / número */}
-            <Box sx={{
-              width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              bgcolor: paso.done ? GREEN : BORDER,
-            }}>
-              {paso.done
-                ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                : <Typography sx={{ fontSize: 10, fontWeight: 700, color: T2 }}>{i + 1}</Typography>
-              }
-            </Box>
-
-            <Typography sx={{ fontSize: 13, fontWeight: paso.done ? 500 : 600, color: paso.done ? T2 : T1, flex: 1,
-              textDecoration: paso.done ? 'line-through' : 'none' }}>
-              {paso.label}
+      <Box sx={{ p: 2.5, pb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1.5 }}>
+          <Box>
+            <Typography sx={{ fontSize: 14, fontWeight: 700, color: T1 }}>
+              {todoListo ? '🎉 ¡Dominas la app!' : '🚀 Primeros pasos'}
             </Typography>
-
-            {paso.path && !paso.done && (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T2} strokeWidth="2">
-                <polyline points="9 18 15 12 9 6"/>
-              </svg>
-            )}
+            <Typography sx={{ fontSize: 12, color: T2, mt: 0.25 }}>
+              {todoListo ? 'Ya conoces todas las funciones. ¡Sigue así!' : `${completados} de ${total} completados — toca cada paso para aprender`}
+            </Typography>
           </Box>
-        ))}
+          <Box onClick={dismiss} sx={{ cursor: 'pointer', color: T2, p: 0.25, '&:hover': { color: T1 }, flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </Box>
+        </Box>
+
+        {/* Barra de progreso */}
+        <Box sx={{ height: 5, borderRadius: '99px', bgcolor: BORDER, overflow: 'hidden' }}>
+          <Box sx={{ height: '100%', borderRadius: '99px', bgcolor: GREEN, width: `${(completados / total) * 100}%`, transition: 'width .5s ease' }} />
+        </Box>
+      </Box>
+
+      {/* Lista de pasos */}
+      <Box sx={{ borderTop: `1px solid ${BORDER}` }}>
+        {MINI_TUTORIALES.map((paso, i) => {
+          const done     = doneMap[paso.id]
+          const isOpen   = abierto === paso.id
+          const esUltimo = i === MINI_TUTORIALES.length - 1
+
+          return (
+            <Box key={paso.id} sx={{ borderBottom: esUltimo ? 'none' : `1px solid ${BORDER}` }}>
+              {/* Fila del paso */}
+              <Box
+                onClick={() => toggle(paso.id)}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 1.5,
+                  px: 2.5, py: 1.5, cursor: 'pointer',
+                  bgcolor: isOpen ? (done ? 'rgba(0,167,111,0.04)' : '#FAFAFA') : 'transparent',
+                  transition: 'background .15s',
+                  '&:hover': { bgcolor: done ? 'rgba(0,167,111,0.06)' : '#F9FAFB' },
+                }}
+              >
+                {/* Indicador */}
+                <Box sx={{
+                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  bgcolor: done ? GREEN : '#F3F4F6',
+                  border: done ? 'none' : `2px solid ${BORDER}`,
+                }}>
+                  {done
+                    ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    : <Typography sx={{ fontSize: 11, fontWeight: 700, color: T2 }}>{i + 1}</Typography>
+                  }
+                </Box>
+
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography sx={{
+                    fontSize: 13, fontWeight: 600, color: done ? T2 : T1, lineHeight: 1.3,
+                    textDecoration: done ? 'line-through' : 'none',
+                  }}>
+                    {paso.emoji} {paso.label}
+                  </Typography>
+                  {!isOpen && !done && (
+                    <Typography sx={{ fontSize: 11, color: T2, mt: 0.2, lineHeight: 1.3 }}>
+                      Toca para ver cómo funciona
+                    </Typography>
+                  )}
+                </Box>
+
+                {/* Chevron */}
+                <Box sx={{ color: T2, display: 'flex', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s', flexShrink: 0 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </Box>
+              </Box>
+
+              {/* Mini-tutorial expandido */}
+              {isOpen && (
+                <Box sx={{ px: 2.5, pb: 2, pt: 0.5 }}>
+                  {/* Descripción */}
+                  <Typography sx={{ fontSize: 13, color: T1, lineHeight: 1.6, mb: paso.tips.length ? 1.5 : 0 }}>
+                    {paso.desc}
+                  </Typography>
+
+                  {/* Tips */}
+                  {paso.tips.length > 0 && (
+                    <Box sx={{ mb: paso.path ? 1.75 : 0 }}>
+                      {paso.tips.map((tip, ti) => (
+                        <Box key={ti} sx={{ display: 'flex', gap: 1, mb: 0.75, alignItems: 'flex-start' }}>
+                          <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: GREEN, mt: 0.65, flexShrink: 0 }} />
+                          <Typography sx={{ fontSize: 12, color: T2, lineHeight: 1.5 }}>{tip}</Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+
+                  {/* Botón ir a sección */}
+                  {paso.path && (
+                    <Box
+                      onClick={() => navigate(paso.path)}
+                      sx={{
+                        display: 'inline-flex', alignItems: 'center', gap: 0.75,
+                        px: 2, py: 0.875, borderRadius: '10px', cursor: 'pointer',
+                        bgcolor: done ? '#F3F4F6' : GREEN,
+                        color: done ? T2 : '#fff',
+                        fontSize: 13, fontWeight: 700,
+                        '&:hover': { opacity: 0.88 }, transition: 'opacity .15s',
+                      }}
+                    >
+                      {paso.accion}
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="9 18 15 12 9 6"/>
+                      </svg>
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </Box>
+          )
+        })}
       </Box>
     </Box>
   )
