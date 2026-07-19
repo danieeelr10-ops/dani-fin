@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, CssBaseline, Box, CircularProgress } from '@mui/material';
 import { theme } from './theme';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -65,20 +65,11 @@ function AppRoutes() {
 
 function AuthenticatedApp() {
   const [showOnboarding, setShowOnboarding] = useState(() => needsOnboarding())
-  const pendingNav = useRef(null)
-  const navigate   = useNavigate()
-
-  // Navega DESPUÉS de que el Layout y las Routes están montados
-  useEffect(() => {
-    if (!showOnboarding && pendingNav.current) {
-      navigate(pendingNav.current, { replace: true })
-      pendingNav.current = null
-    }
-  }, [showOnboarding])
+  const [landingPath, setLandingPath]       = useState('/inicio')
 
   if (showOnboarding) return (
     <Onboarding onComplete={(path) => {
-      pendingNav.current = path || '/inicio'
+      setLandingPath(path || '/inicio')
       setShowOnboarding(false)
     }} />
   );
@@ -86,7 +77,7 @@ function AuthenticatedApp() {
   return (
     <Layout>
       <Routes>
-            <Route path="/" element={<Navigate to="/inicio" replace />} />
+            <Route path="/" element={<Navigate to={landingPath} replace />} />
             <Route path="/inicio"      element={<Inicio />} />
             <Route path="/registro"    element={<Registrar />} />
             <Route path="/dashboard"   element={<Dashboard />} />
