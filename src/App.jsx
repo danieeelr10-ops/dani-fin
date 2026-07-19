@@ -65,19 +65,13 @@ function AppRoutes() {
 
 function AuthenticatedApp() {
   const [showOnboarding, setShowOnboarding] = useState(() => needsOnboarding())
-  const [landingPath, setLandingPath]       = useState('/inicio')
 
-  if (showOnboarding) return (
-    <Onboarding onComplete={(path) => {
-      setLandingPath(path || '/inicio')
-      setShowOnboarding(false)
-    }} />
-  );
+  if (showOnboarding) return <Onboarding onComplete={() => setShowOnboarding(false)} />;
 
   return (
     <Layout>
       <Routes>
-            <Route path="/" element={<Navigate to={landingPath} replace />} />
+            <Route path="/" element={<Navigate to="/inicio" replace />} />
             <Route path="/inicio"      element={<Inicio />} />
             <Route path="/registro"    element={<Registrar />} />
             <Route path="/dashboard"   element={<Dashboard />} />

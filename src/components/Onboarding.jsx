@@ -106,7 +106,8 @@ export default function Onboarding({ onComplete }) {
     }
 
     localStorage.setItem(ONBOARDING_KEY, '1')
-    onComplete?.('/presupuesto')
+    window.history.replaceState(null, '', '/presupuesto')
+    onComplete?.()
   }
 
   function skip() {
