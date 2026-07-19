@@ -112,12 +112,12 @@ function PrimerosPasos({ state, navigate }) {
   const tieneAhorro      = Object.values(state.metas || {}).some(m => (m.ahorro || 0) > 0) || (state.metasPersonalizadas || []).length > 0
 
   const doneMap = {
-    cuenta:         true,
-    registro:       tieneMovimiento,
-    presupuesto:    tienePresupuesto,
-    historial:      tieneHistorial,
-    tc:             tieneTC,
-    'deudas-ahorro': tieneAhorro,
+    cuenta:          true,
+    registro:        false,
+    presupuesto:     false,
+    historial:       false,
+    tc:              false,
+    'deudas-ahorro': false,
   }
 
   const completados = Object.values(doneMap).filter(Boolean).length

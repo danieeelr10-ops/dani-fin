@@ -106,7 +106,6 @@ export default function Onboarding({ onComplete }) {
     }
 
     localStorage.setItem(ONBOARDING_KEY, '1')
-    window.history.replaceState(null, '', '/presupuesto')
     onComplete?.()
   }
 
