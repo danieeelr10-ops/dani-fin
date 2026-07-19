@@ -34,9 +34,35 @@ const MINI_TUTORIALES = [
     accion: null,
   },
   {
+    id: 'config',
+    emoji: '⚙️',
+    label: 'Configura tu cuenta',
+    desc: 'Antes de empezar, dile a la app cómo está organizado tu dinero: qué cuentas tienes (Nequi, Bancolombia, efectivo), si usas tarjeta de crédito y cuánto tienes disponible hoy en cada una.',
+    tips: [
+      'Agrega todas las cuentas donde guardas plata',
+      'Si usas tarjeta de crédito, agrégala aquí también',
+      'Pon el saldo actual de cada cuenta para que los cálculos sean correctos',
+    ],
+    path: '/config',
+    accion: 'Ir a Configuración',
+  },
+  {
+    id: 'presupuesto',
+    emoji: '📊',
+    label: 'Configura tu presupuesto',
+    desc: 'Define cuánto quieres gastar en cada categoría al mes: arriendo, mercado, transporte, salidas, salud... La app te avisa cuando te estás pasando.',
+    tips: [
+      'Empieza por los gastos fijos (arriendo, servicios, salud)',
+      'Luego agrega los variables (mercado, transporte, salidas)',
+      'Por último, pon tus ingresos esperados del mes',
+    ],
+    path: '/presupuesto',
+    accion: 'Ir a Presupuesto',
+  },
+  {
     id: 'registro',
     emoji: '💸',
-    label: 'Registrar gastos e ingresos',
+    label: 'Registra tus gastos e ingresos',
     desc: 'Cada vez que gastes o recibas plata, regístralo aquí. En segundos sabrás exactamente a dónde va tu dinero.',
     tips: [
       'Usa el botón verde [+] en la barra inferior para registros rápidos',
@@ -47,22 +73,9 @@ const MINI_TUTORIALES = [
     accion: 'Ir a Registrar',
   },
   {
-    id: 'presupuesto',
-    emoji: '📊',
-    label: 'Configurar tu presupuesto',
-    desc: 'Define cuánto quieres gastar en cada categoría al mes. La app te avisa cuando te estás pasando.',
-    tips: [
-      'Configúralo al inicio de cada mes',
-      'Empieza por los gastos fijos (arriendo, servicios)',
-      'Puedes desglosar cada categoría en conceptos específicos',
-    ],
-    path: '/presupuesto',
-    accion: 'Ir a Presupuesto',
-  },
-  {
     id: 'historial',
     emoji: '📋',
-    label: 'Revisar tu historial',
+    label: 'Revisa tu historial',
     desc: 'Ve todos tus movimientos en un solo lugar. Filtra por categoría, cuenta o fecha para encontrar cualquier transacción.',
     tips: [
       'Filtra por categoría para ver en qué gastas más',
@@ -113,8 +126,9 @@ function PrimerosPasos({ state, navigate }) {
 
   const doneMap = {
     cuenta:          true,
-    registro:        false,
+    config:          false,
     presupuesto:     false,
+    registro:        false,
     historial:       false,
     tc:              false,
     'deudas-ahorro': false,
