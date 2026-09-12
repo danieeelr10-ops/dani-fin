@@ -22,7 +22,8 @@ const TABS = [
   { path: 'flujo',        featureKey: null,           label: 'Flujo' },
   { path: 'reportes',     featureKey: null,           label: 'Reportes' },
   { path: 'metas',        featureKey: null,           label: 'Metas $' },
-  { path: 'apuntes',      featureKey: null,           label: 'Cuentas' },
+  { path: 'cuentas',      featureKey: null,           label: 'Cuentas' },
+  { path: 'apuntes',      featureKey: null,           label: 'Notas' },
 ]
 
 export default function FinanzasLayout() {

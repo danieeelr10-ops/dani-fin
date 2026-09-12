@@ -29,6 +29,7 @@ import FlujoDeCaja from './pages/FlujoDeCaja';
 import Reportes from './pages/Reportes';
 import Deudas from './pages/Deudas';
 import Apuntes from './pages/Apuntes';
+import Cuentas from './pages/Cuentas';
 import Analisis from './pages/Analisis';
 import Ahorro from './pages/Ahorro';
 import Admin from './pages/Admin';
@@ -107,6 +108,7 @@ function AuthenticatedApp() {
               <Route path="reportes"    element={<Reportes />} />
               <Route path="metas"       element={<Metas />} />
               <Route path="apuntes"     element={<Apuntes />} />
+              <Route path="cuentas"     element={<Cuentas />} />
             </Route>
 
             <Route path="/habitos"     element={<Habitos />} />
