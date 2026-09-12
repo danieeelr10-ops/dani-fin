@@ -7,10 +7,11 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['favicon.ico', 'icon.svg', 'apple-touch-icon-180x180.png'],
       manifest: false, // usamos el manifest.json externo
       workbox: {
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // bundle principal ya pasa de 2 MiB
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         importScripts: ['/sw-notif.js'],
         runtimeCaching: [

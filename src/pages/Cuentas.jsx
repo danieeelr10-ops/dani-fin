@@ -52,7 +52,7 @@ export default function Cuentas() {
 
         {/* Header */}
         <Box sx={{ pt: 3, pb: 2 }}>
-          <Typography sx={{ fontSize: 22, fontWeight: 600, color: T1, letterSpacing: '-0.3px', lineHeight: 1.2 }}>Cuentas</Typography>
+          <Typography sx={{ fontSize: 22, fontWeight: 600, color: T1, letterSpacing: '-0.3px', lineHeight: 1.2 }}>Cuentas bancarias</Typography>
           <Typography sx={{ fontSize: 13, color: T2, mt: 0.25 }}>Agrega o elimina las cuentas donde recibes y guardas tu dinero</Typography>
         </Box>
 
