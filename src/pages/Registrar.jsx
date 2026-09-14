@@ -5,6 +5,7 @@ import { useFinanzas } from 'src/context/FinanzasContext';
 import { useSnackbar } from 'src/context/SnackbarContext';
 import { parsearVoz, inferirCategoria } from 'src/utils/parsers';
 import { getMesActual } from 'src/utils/format';
+import { computeProyeccionMes } from 'src/utils/cashflow';
 import { CAT_ICONS, CATEGORIAS_VOZ, MESES, MES_NAMES } from 'src/constants';
 
 const BG      = '#F7F7F8'
@@ -24,14 +25,22 @@ function fmtCOP(n) {
   return '$' + Math.round(n).toLocaleString('es-CO');
 }
 function todayStr() {
-  return new Date().toISOString().split('T')[0];
+  return new Date().toLocaleDateString('en-CA');
 }
 function dateToMes(dateStr) {
   return 'M' + parseInt(dateStr.split('-')[1], 10);
 }
+function getMesParaTC(fechaStr, tarjetaObj) {
+  const corte = tarjetaObj?.fechaCorte != null ? parseInt(tarjetaObj.fechaCorte, 10) : 0;
+  if (!corte || corte < 1) return dateToMes(fechaStr);
+  const parts = fechaStr.split('-');
+  const month = parseInt(parts[1], 10);
+  const day   = parseInt(parts[2], 10);
+  return day > corte ? 'M' + (month === 12 ? 1 : month + 1) : 'M' + month;
+}
 function fmtDateLabel(dateStr) {
   const today = todayStr();
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-CA');
   if (dateStr === today) return 'Hoy';
   if (dateStr === yesterday) return 'Ayer';
   const d = new Date(dateStr + 'T12:00:00');
@@ -95,7 +104,7 @@ function CuentaSelector({ state, cuenta, setCuenta, tarjeta, setTarjeta }) {
   const cuentasBase = state.cuentas.filter(c => c !== 'T.C');
   return (
     <Box>
-      <Box sx={{ display: 'flex', gap: 0.625, flexWrap: 'wrap', mb: state.cuentas.includes('T.C') ? 0.875 : 0 }}>
+      <Box sx={{ display: 'flex', gap: 0.625, flexWrap: 'wrap', mb: tarjetas.length > 0 || state.cuentas.includes('T.C') ? 0.875 : 0 }}>
         {cuentasBase.map(c => {
           const sel = cuenta === c;
           return (
@@ -107,7 +116,7 @@ function CuentaSelector({ state, cuenta, setCuenta, tarjeta, setTarjeta }) {
           );
         })}
       </Box>
-      {state.cuentas.includes('T.C') && (
+      {(tarjetas.length > 0 || state.cuentas.includes('T.C')) && (
         <Box sx={{ display: 'flex', gap: 0.625, flexWrap: 'wrap' }}>
           {tarjetas.length === 0 ? (
             <Box onClick={() => { setCuenta(cuenta === 'T.C' ? '' : 'T.C'); setTarjeta(''); }} sx={{
@@ -178,21 +187,34 @@ function SimpleRow({ cat, presupuesto, pagado, esIngreso, onOpen, onMoverMes }) 
 
 // ── Acordeón por categoría ────────────────────────────────
 // items=[] → muestra formulario libre; items=[...] → muestra sub-items
-function CategoryAccordion({ cat, items, presupuesto, pagadoCat, txById, esIngreso, esVariable, onOpenItem, onPagarLibre }) {
+function CategoryAccordion({ cat, items, presupuesto, pagadoCat, txById, mes, esIngreso, esVariable, onOpenItem, onPagarLibre }) {
   const [open, setOpen] = useState(false);
   const icon = CAT_ICONS[cat] || (esIngreso ? '💼' : '🔹');
+
+  // Cuánto de un ítem está pagado, contando SOLO transacciones del mes activo.
+  // Sin este filtro, un ítem reutilizado de un mes anterior con un txId viejo
+  // (de un mes distinto) se ve como "pagado" aunque no haya ningún pago real
+  // este mes — el header de la categoría (que sí filtra por mes) queda en $0
+  // mientras los ítems individuales muestran ✓Pagado, algo que no cuadra.
+  function pagadoDelMes(item) {
+    const pagos = item.pagos?.length ? item.pagos : (item.txId ? [{ txId: item.txId }] : []);
+    return pagos.reduce((s, p) => {
+      const tx = txById[p.txId];
+      return s + (tx && tx.mes === mes ? Math.abs(tx.total) : 0);
+    }, 0);
+  }
 
   const tieneItems  = items && items.length > 0;
   const totalPres   = tieneItems ? items.reduce((s, i) => s + i.monto, 0) : (presupuesto || 0);
   const totalPagado = esVariable
     ? (pagadoCat || 0)
     : tieneItems
-      ? items.reduce((s, i) => { if (!i.pagadoCon) return s; const tx = txById[i.txId]; return s + (tx ? Math.abs(tx.total) : i.monto); }, 0)
+      ? items.reduce((s, i) => s + pagadoDelMes(i), 0)
       : (pagadoCat || 0);
   // Variables: el denominador muestra lo real si supera el presupuesto
   const totalDenom   = esVariable ? Math.max(totalPres, totalPagado) : totalPres;
   const pct          = totalDenom > 0 ? Math.min((totalPagado / totalDenom) * 100, 100) : 0;
-  const todosPagados = tieneItems ? items.every(i => i.pagadoCon) : (pagadoCat >= presupuesto && presupuesto > 0);
+  const todosPagados = tieneItems ? items.every(i => pagadoDelMes(i) >= i.monto && i.monto > 0) : (pagadoCat >= presupuesto && presupuesto > 0);
 
   const sinMovimiento = totalPagado === 0;
 
@@ -228,12 +250,7 @@ function CategoryAccordion({ cat, items, presupuesto, pagadoCat, txById, esIngre
           {tieneItems ? (
             // Sub-items pre-definidos
             items.map(item => {
-              // Soporte modelo nuevo (pagos[]) y viejo (txId)
-              const pagos = item.pagos?.length ? item.pagos : (item.txId ? [{ txId: item.txId }] : []);
-              const pagadoItem = pagos.reduce((s, p) => {
-                const tx = txById[p.txId];
-                return s + (tx ? Math.abs(tx.total) : 0);
-              }, 0);
+              const pagadoItem = pagadoDelMes(item);
               const restante   = Math.max(item.monto - pagadoItem, 0);
               const itemPagado = pagadoItem >= item.monto && item.monto > 0;
               const parcial    = pagadoItem > 0 && !itemPagado;
@@ -361,10 +378,31 @@ function PaySheet({ sel, state, onClose, onConfirm }) {
         </Box>
 
         {/* Cuenta */}
-        <Box sx={{ mb: 2 }}>
+        <Box sx={{ mb: cuenta ? 1 : 2 }}>
           <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.75, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cuenta</Typography>
           <CuentaSelector state={state} cuenta={cuenta} setCuenta={setCuenta} tarjeta={tarjeta} setTarjeta={setTarjeta} />
         </Box>
+
+        {/* Aviso corte TC */}
+        {(() => {
+          const tcObj = (state.tarjetas || []).find(t => t.nombre === (cuenta === 'T.C' ? tarjeta : cuenta));
+          const corteDay = tcObj?.fechaCorte != null ? parseInt(tcObj.fechaCorte, 10) : 0;
+          if (!corteDay || corteDay < 1) return null;
+          const mesCalendario = dateToMes(fecha);
+          const mesConCorte   = getMesParaTC(fecha, tcObj);
+          if (mesConCorte === mesCalendario) return null;
+          const mesNombre = MES_NAMES[MESES.indexOf(mesConCorte)];
+          return (
+            <Box sx={{ mb: 2, px: 1.25, py: 0.875, borderRadius: '8px', bgcolor: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.35)', display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>
+              <Typography sx={{ fontSize: 14, lineHeight: 1, flexShrink: 0 }}>💳</Typography>
+              <Typography sx={{ fontSize: 11, color: '#92400E', lineHeight: 1.5 }}>
+                Después del corte del día {tcObj.fechaCorte} — va al extracto de <strong>{mesNombre}</strong>
+              </Typography>
+            </Box>
+          );
+        })()}
+
+        <Box sx={{ mb: 2 }} />
 
         {/* Botones */}
         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -411,6 +449,7 @@ function IngresoRecibido({ tx }) {
 
 // ── Tab: Mis pagos ─────────────────────────────────────────
 function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoItem, deletePresupuestoItem, showToast }) {
+  const { getCarryOver } = useFinanzas();
   const [mes, setMes] = useState(getMesActual());
   const [colTab, setColTab] = useState('izq');
   const mesIdx = MESES.indexOf(mes);
@@ -491,7 +530,16 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
   const totalGastado       = [...fijos, ...vars].reduce((s, c) => s + (pagadoPorCat[c] || 0), 0);
   const totalIngPresup     = state.categoriasIngreso.reduce((s, c) => s + (presupMes[c] || 0), 0);
   const totalIngRecibido   = txsMes.filter(t => t.movimiento === 'Ingreso' && t.categoria !== 'Pago TC' && t.estado !== 'pendiente' && !t.esFuturo).reduce((s, t) => s + Math.abs(t.total), 0);
-  const balance            = totalIngRecibido - totalGastado;
+
+  // Proyección del mes — misma función que usa Inicio, así las dos pantallas
+  // siempre coinciden. "egresosNuevos" es solo informativo: ya está incluido
+  // en la proyección (a través del gasto real y el presupuesto agotado), no
+  // se resta aparte para no contarlo dos veces.
+  const carryOverMes = getCarryOver(mes);
+  const { proyeccion: proyeccionMes, egresosNuevos } = useMemo(
+    () => computeProyeccionMes(state.transacciones || [], mes, carryOverMes, presupMes, state.presupuestosDetalle, state.categoriasIngreso, state.categoriasEgresoFijo, state.categoriasEgresoVariable),
+    [state.transacciones, mes, carryOverMes, presupMes, state.presupuestosDetalle, state.categoriasIngreso, state.categoriasEgresoFijo, state.categoriasEgresoVariable]
+  );
 
   const [payModal, setPayModal] = useState(null);
 
@@ -508,10 +556,12 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
       pagarPresupuestoItem(mes, itemId, cuenta, tarjeta || null, monto);
     } else {
       // Categoría sin detalle — crear transacción genérica
-      const mes2 = dateToMes(fecha);
-      const esTarjeta = (state.tarjetas || []).some(t => t.nombre === cuenta);
+      const esTarjeta    = (state.tarjetas || []).some(t => t.nombre === cuenta);
       const cuentaFinal  = esTarjeta ? 'T.C' : cuenta;
       const tarjetaFinal = esTarjeta ? cuenta : (cuenta === 'T.C' && tarjeta ? tarjeta : undefined);
+      const _tcRef2      = tarjetaFinal || (esTarjeta ? cuenta : null);
+      const _tcObj2      = _tcRef2 ? (state.tarjetas || []).find(t => t.nombre === _tcRef2) : null;
+      const mes2         = _tcObj2 ? getMesParaTC(fecha, _tcObj2) : dateToMes(fecha);
       addTransaccion({
         id: Date.now(),
         fecha: new Date(fecha + 'T12:00:00').toISOString(),
@@ -552,14 +602,13 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
       {/* ── Resumen del mes ── */}
       {(totalPresupuestado > 0 || totalIngPresup > 0) && (
         <Box sx={{ mb: 2.5, borderRadius: '14px', bgcolor: CARD, boxShadow: CARD_SH, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
-          {/* Fila 1: Ingresos / Gastos / Balance presupuestal */}
+          {/* Fila 1: Ingresos / Gastos presupuestal */}
           <Box sx={{ p: 1.5, pb: 1.25 }}>
             <Typography sx={{ fontSize: 9, fontWeight: 700, color: T2, textTransform: 'uppercase', letterSpacing: '0.07em', mb: 1 }}>Presupuestal</Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, mb: 1.25 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 1.25 }}>
               {[
                 { lbl: 'Ingresos', val: totalIngRecibido, meta: totalIngPresup, color: GREEN },
                 { lbl: 'Gastos', val: totalGastado, meta: totalPresupuestado, color: totalGastado > totalPresupuestado ? RED : T1 },
-                { lbl: 'Balance', val: balance, color: balance >= 0 ? GREEN : RED },
               ].map(({ lbl, val, meta, color }) => (
                 <Box key={lbl} sx={{ textAlign: 'center' }}>
                   <Typography sx={{ fontSize: 9, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.25 }}>{lbl}</Typography>
@@ -580,6 +629,26 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
                   bgcolor: totalGastado > totalPresupuestado ? RED : totalGastado / totalPresupuestado > 0.8 ? '#D97706' : GREEN,
                 }} />
               </Box>
+            )}
+          </Box>
+
+          {/* Fila 2: Proyección del mes — ingresos vs. (presupuesto completo + nuevos egresos) */}
+          <Box sx={{ p: 1.5, pt: 1.25, borderTop: `1px solid ${BORDER}` }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 0.25 }}>
+              <Typography sx={{ fontSize: 9, fontWeight: 700, color: T2, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                Proyección x mes
+              </Typography>
+              <Typography sx={{ fontSize: 15, fontWeight: 800, color: proyeccionMes >= 0 ? GREEN : RED, fontFamily: 'monospace', lineHeight: 1 }}>
+                {proyeccionMes < 0 ? '-' : ''}{fmtCOP(Math.abs(proyeccionMes))}
+              </Typography>
+            </Box>
+            <Typography sx={{ fontSize: 10, color: T2 }}>
+              Con lo que ya tienes, lo que falta por cobrar y lo que falta por pagar del presupuesto
+            </Typography>
+            {egresosNuevos > 0 && (
+              <Typography sx={{ fontSize: 9, color: '#D97706', mt: 0.5 }}>
+                Incluye {fmtCOP(egresosNuevos)} ya gastados fuera del presupuesto
+              </Typography>
             )}
           </Box>
 
@@ -645,7 +714,7 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
                     items={egresoDetallePorCat[cat] || []}
                     presupuesto={presupMes[cat] || 0}
                     pagadoCat={pagadoPorCat[cat] || 0}
-                    txById={txById} esIngreso={false}
+                    txById={txById} mes={mes} esIngreso={false}
                     onOpenItem={(item, pagadoItem) => openPay({ cat: item.concepto, categoriaReal: cat, presupuesto: item.monto, pagado: pagadoItem, esIngreso: false, itemId: item.id, conceptoFijo: item.concepto })}
                     onPagarLibre={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: pagadoPorCat[cat] || 0, esIngreso: false })}
                   />
@@ -666,7 +735,7 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
                   items={egresoDetallePorCat[cat] || []}
                   presupuesto={presupMes[cat] || 0}
                   pagadoCat={pagadoPorCat[cat] || 0}
-                  txById={txById} esIngreso={false}
+                  txById={txById} mes={mes} esIngreso={false}
                   onOpenItem={(item, pagadoItem) => openPay({ cat: item.concepto, categoriaReal: cat, presupuesto: item.monto, pagado: pagadoItem, esIngreso: false, itemId: item.id, conceptoFijo: item.concepto })}
                   onPagarLibre={() => openPay({ cat, presupuesto: presupMes[cat] || 0, pagado: pagadoPorCat[cat] || 0, esIngreso: false })}
                 />
@@ -730,6 +799,18 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
     [catSearch, allCats]
   );
 
+  // Detectar si el gasto cae después del corte y debe ir al siguiente mes
+  const tcShiftInfo = useMemo(() => {
+    const tcObj = tarjetas.find(t => t.nombre === cuenta) ||
+                  (cuenta === 'T.C' && tarjeta ? tarjetas.find(t => t.nombre === tarjeta) : null);
+    const corteDay = tcObj?.fechaCorte != null ? parseInt(tcObj.fechaCorte, 10) : 0;
+    if (!corteDay || corteDay < 1) return null;
+    const mesCalendario = dateToMes(fecha);
+    const mesConCorte   = getMesParaTC(fecha, tcObj);
+    if (mesConCorte === mesCalendario) return null;
+    return { mesNombre: MES_NAMES[MESES.indexOf(mesConCorte)], corte: tcObj.fechaCorte, tarjetaNombre: tcObj.nombre };
+  }, [cuenta, tarjeta, fecha, tarjetas]);
+
   function inferirDesdeTexto(texto) {
     if (!texto) return '';
     const norm = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -779,11 +860,13 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
     const pagoVal    = pagoParcial && parseAmt(montoPago) > 0
       ? (tipoVal === 'Egreso' ? -Math.abs(parseAmt(montoPago)) : Math.abs(parseAmt(montoPago)))
       : montoFinal;
-    const mesVal = dateToMes(fechaVal);
 
-    const esTarjeta = (state.tarjetas || []).some(t => t.nombre === cuentaVal);
-    const cuentaFinal = esTarjeta ? 'T.C' : cuentaVal;
+    const esTarjeta    = (state.tarjetas || []).some(t => t.nombre === cuentaVal);
+    const cuentaFinal  = esTarjeta ? 'T.C' : cuentaVal;
     const tarjetaFinal = esTarjeta ? cuentaVal : (cuentaVal === 'T.C' && tarjeta ? tarjeta : undefined);
+    const _tcRef       = tarjetaFinal || (esTarjeta ? cuentaVal : null);
+    const _tcObj       = _tcRef ? (state.tarjetas || []).find(t => t.nombre === _tcRef) : null;
+    const mesVal       = _tcObj ? getMesParaTC(fechaVal, _tcObj) : dateToMes(fechaVal);
 
     addTransaccion({
       id: Date.now(), fecha: new Date(fechaVal + 'T12:00:00').toISOString(), mes: mesVal,
@@ -834,7 +917,7 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
     if (!m) { setVozPreview('No detecté el monto. Ej: "treinta mil Rappi Nequi"'); return; }
     const catFinal = c || inferirCategoria(co) || 'Extras';
     const ok = guardar({ monto: m, categoria: catFinal, concepto: co, cuenta: cu, tipoMov: tm, tipo: mov });
-    if (ok) { setVozPreview(''); navigate('/historial'); }
+    if (ok) { setVozPreview(''); navigate('/finanzas/historial'); }
   }
 
   const canSave = parseAmt(monto) > 0 && concepto.trim() && categoria && (tipo === 'Ingreso' || cuenta);
@@ -854,7 +937,7 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
               setEsFuturo(val);
               if (val && fecha <= todayStr()) {
                 const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-                setFecha(tomorrow.toISOString().split('T')[0]);
+                setFecha(tomorrow.toLocaleDateString('en-CA'));
               }
               if (!val) setFecha(todayStr());
             }} sx={{
@@ -989,6 +1072,18 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
         </Box>
       </Box>
 
+      {/* ── Aviso cambio de extracto por fecha de corte ── */}
+      {tcShiftInfo && (
+        <Box sx={{ px: '20px', mb: 1.5 }}>
+          <Box sx={{ px: 1.25, py: 1, borderRadius: '10px', bgcolor: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.35)', display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+            <Typography sx={{ fontSize: 16, lineHeight: 1, flexShrink: 0, mt: 0.1 }}>💳</Typography>
+            <Typography sx={{ fontSize: 12, color: '#92400E', lineHeight: 1.5 }}>
+              Este gasto es después del corte del día {tcShiftInfo.corte} — entra al extracto de <strong>{tcShiftInfo.mesNombre}</strong>
+            </Typography>
+          </Box>
+        </Box>
+      )}
+
       {/* ── Cuenta ── */}
       <Box sx={{ px: '20px', mb: 1.5 }}>
         {state.cuentas.filter(c => c !== 'T.C').length > 0 && (
@@ -1007,7 +1102,7 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
             </Box>
           </Box>
         )}
-        {state.cuentas.includes('T.C') && (
+        {(tarjetas.length > 0 || state.cuentas.includes('T.C')) && (
           <Box>
             <Label>Tarjeta de crédito</Label>
             <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>

@@ -1,8 +1,10 @@
 // Utilidades de flujo de caja real
 // Separadas de metrics.js porque trabajan con proyecciones y estados de cobro
 
+import { computeMetrics } from './metrics';
+
 function todayStr() {
-  return new Date().toISOString().split('T')[0];
+  return new Date().toLocaleDateString('en-CA');
 }
 
 function diasHasta(fechaStr) {
@@ -41,6 +43,67 @@ export function computeDisponibleHoy(transacciones, mes, carryOver = 0) {
     .reduce((s, t) => s + Math.abs(t.total), 0);
 
   return carryOver + ingRecibidos - egCash - pagoTC;
+}
+
+// Proyección de fin de mes — fuente única para Inicio y Registrar, para que
+// nunca vuelvan a mostrar dos números de "proyección" distintos.
+// = dinero real disponible hoy
+// + ingresos presupuestados que aún faltan por cobrar (capeado al total del mes,
+//   no ítem por ítem, para que un ingreso que llegó repartido distinto compense)
+// − espacio de presupuesto que aún queda por gastar (0 si ya te pasaste)
+// − deuda de tarjeta de crédito ya generada y no pagada
+// "egresosNuevos" (gasto en categorías sin presupuesto) NO se resta aparte:
+// ya está reflejado en "disponibleHoy" y en el presupuesto agotado — se
+// devuelve solo como dato informativo para mostrar de dónde viene el gasto.
+export function computeProyeccionMes(transacciones, mes, carryOver, presupMes, presupuestosDetalle, categoriasIngreso, categoriasEgresoFijo, categoriasEgresoVariable) {
+  const m = computeMetrics(transacciones, mes);
+  const disponibleHoy = computeDisponibleHoy(transacciones, mes, carryOver);
+  const txsMes = transacciones.filter(t => t.mes === mes);
+
+  const catsIngreso = Object.keys(presupMes).filter(k => categoriasIngreso?.includes(k) && (presupMes[k] || 0) > 0);
+  const ingPres     = catsIngreso.reduce((s, k) => s + (presupMes[k] || 0), 0);
+  const egFijoPres  = Object.keys(presupMes).filter(k => categoriasEgresoFijo?.includes(k)).reduce((s, k) => s + (presupMes[k] || 0), 0);
+  const egVarPres   = Object.keys(presupMes).filter(k => categoriasEgresoVariable?.includes(k)).reduce((s, k) => s + (presupMes[k] || 0), 0);
+  const egPresPlan  = egFijoPres + egVarPres;
+  const catsEgresoPresupuestadas = new Set(
+    Object.keys(presupMes).filter(k => (categoriasEgresoFijo?.includes(k) || categoriasEgresoVariable?.includes(k)) && (presupMes[k] || 0) > 0)
+  );
+
+  // Ítems ya vinculados a mano a una transacción específica: se cuentan por su valor real
+  const detalleVinculado = (presupuestosDetalle?.[mes] || [])
+    .filter(i => categoriasIngreso?.includes(i.categoria) && i.pagadoCon);
+  const idsVinculados = new Set(detalleVinculado.map(i => i.txId).filter(Boolean));
+  const totalVinculado = detalleVinculado.reduce((total, item) => {
+    const tx = item.txId ? txsMes.find(t => t.id === item.txId) : null;
+    return total + (tx ? Math.abs(tx.total) : item.monto);
+  }, 0);
+
+  // Resto de ingresos ya cobrados (no pendientes/futuros) en categorías presupuestadas
+  const totalCategoria = txsMes
+    .filter(t =>
+      t.movimiento === 'Ingreso' &&
+      catsIngreso.includes(t.categoria) &&
+      t.estado !== 'pendiente' && !t.esFuturo &&
+      !idsVinculados.has(t.id)
+    )
+    .reduce((s, t) => s + Math.abs(t.total), 0);
+
+  const ingRecibidoPresup  = Math.min(totalVinculado + totalCategoria, ingPres);
+  const ingresosPendientes = Math.max(ingPres - ingRecibidoPresup, 0);
+  const gastosPendientes   = Math.max(egPresPlan - m.eg, 0);
+  const tcPorPagar         = Math.max((m.tcEg || 0) - (m.pagoTC || 0), 0);
+
+  const egresosNuevos = txsMes
+    .filter(t => t.movimiento === 'Egreso' && t.categoria !== 'Pago TC' && !catsEgresoPresupuestadas.has(t.categoria))
+    .reduce((s, t) => s + Math.abs(t.total), 0);
+
+  const proyeccion = disponibleHoy + ingresosPendientes - gastosPendientes - tcPorPagar;
+  const margenPlan = ingPres - egPresPlan;
+
+  return {
+    disponibleHoy, ingresosPendientes, gastosPendientes, tcPorPagar,
+    egresosNuevos, proyeccion, margenPlan, ingPres, egPresPlan, egFijoPres, egVarPres, ingRecibidoPresup,
+  };
 }
 
 // Ingresos pendientes de cobro (estado: pendiente | parcial, o esFuturo=true)
