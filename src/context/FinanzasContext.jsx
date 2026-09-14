@@ -37,6 +37,7 @@ const INITIAL_STATE = {
   nombreUsuario: '',
   deudas: [],
   apuntes: { pagosClub: [], notas: [] },
+  cuentasExternas: [],
   lastModified: 0,
 };
 
@@ -73,6 +74,7 @@ function mergeWithDefaults(p) {
     nombreUsuario:            p.nombreUsuario            || '',
     deudas:                   p.deudas                   || [],
     apuntes:                  p.apuntes                  || { pagosClub: [], notas: [] },
+    cuentasExternas:          p.cuentasExternas          || [],
     lastModified:             p.lastModified             || 0,
   };
 }
@@ -859,10 +861,19 @@ export function FinanzasProvider({ children }) {
     if (item.txId) return [{ txId: item.txId, cuenta: item.pagadoCon, tarjeta: item.tarjetaPago || null }];
     return [];
   }
-  function getItemMontoPagado(item, transacciones) {
-    return getItemPagos(item).reduce((s, p) => {
+  // Pagos de un item que realmente pertenecen a "mes" — evita contar (o borrar)
+  // un pago de otro mes que haya quedado vinculado por error (p.ej. un ítem
+  // reutilizado que conservó el txId de un pago anterior).
+  function getItemPagosDelMes(item, transacciones, mes) {
+    return getItemPagos(item).filter(p => {
       const tx = transacciones.find(t => t.id === p.txId);
-      return s + (tx ? Math.abs(tx.total) : 0);
+      return tx && tx.mes === mes;
+    });
+  }
+  function getItemMontoPagado(item, transacciones, mes) {
+    return getItemPagosDelMes(item, transacciones, mes).reduce((s, p) => {
+      const tx = transacciones.find(t => t.id === p.txId);
+      return s + Math.abs(tx.total);
     }, 0);
   }
 
@@ -874,7 +885,7 @@ export function FinanzasProvider({ children }) {
       if (!item) return prev;
 
       const esIngreso = (prev.categoriasIngreso || []).includes(item.categoria);
-      const montoPagadoAntes = getItemMontoPagado(item, prev.transacciones);
+      const montoPagadoAntes = getItemMontoPagado(item, prev.transacciones, mes);
       const restante = item.monto - montoPagadoAntes;
       if (restante <= 0) return prev; // ya completamente pagado
 
@@ -935,7 +946,7 @@ export function FinanzasProvider({ children }) {
       const detalles = prev.presupuestosDetalle[mes] || [];
       const item = detalles.find(d => d.id === id);
       if (!item) return prev;
-      const pagos = getItemPagos(item);
+      const pagos = getItemPagosDelMes(item, prev.transacciones, mes);
       const txIdsAEliminar = new Set(pagos.map(p => p.txId).filter(Boolean));
       const updated = detalles.map(d => d.id === id ? { ...d, pagadoCon: null, tarjetaPago: null, txId: null, pagos: [] } : d);
       return {
