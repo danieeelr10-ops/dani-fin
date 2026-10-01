@@ -1,9 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef, Component } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Box, Typography } from '@mui/material'
+import { supabase } from 'src/lib/supabase'
 import { useFinanzas } from 'src/context/FinanzasContext'
+import { useFeatures } from 'src/context/FeaturesContext'
 import { computeMetrics } from 'src/utils/metrics'
-import { computeDisponibleHoy, computeProximosPagos, computeAlertas } from 'src/utils/cashflow'
+import { computeProximosPagos, computeAlertas, computeProyeccionMes } from 'src/utils/cashflow'
 import AlertasBanner from 'src/components/AlertasBanner'
 import { formatMoney, formatMoneyShort, getMesActual } from 'src/utils/format'
 import { CAT_ICONS, CAT_COLORS, MES_NAMES, MESES } from 'src/constants'
@@ -21,7 +23,8 @@ const BORDER  = '#E5E7EB'
 // ── Helpers ───────────────────────────────────────────────────
 function ls(key) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null } catch { return null } }
 
-const GUIA_KEY = 'dani_fin_guia_dismissed'
+const GUIA_KEY       = 'dani_fin_guia_dismissed'
+const GUIA_PASOS_KEY = 'dani_fin_guia_pasos'
 
 const MINI_TUTORIALES = [
   {
@@ -37,11 +40,11 @@ const MINI_TUTORIALES = [
     id: 'config',
     emoji: '⚙️',
     label: 'Configura tu cuenta',
-    desc: 'Antes de empezar, dile a la app cómo está organizado tu dinero: qué cuentas tienes (Nequi, Bancolombia, efectivo) y cuánto tienes disponible hoy en cada una.',
+    desc: 'Antes de empezar, dile a la app cómo está organizado tu dinero: qué cuentas tienes (Nequi, Bancolombia, efectivo) y si usas tarjetas de crédito.',
     tips: [
       'Agrega todas las cuentas donde guardas plata',
       'Pon el saldo actual de cada cuenta para que los cálculos sean correctos',
-      'Puedes agregar cuentas personalizadas si no están en la lista',
+      'Si tienes tarjetas de crédito, agrégalas aquí — luego aparecen en la sección T.C',
     ],
     path: '/config',
     accion: 'Ir a Configuración',
@@ -113,30 +116,100 @@ const MINI_TUTORIALES = [
   },
 ]
 
-function PrimerosPasos({ state, navigate }) {
-  const [dismissed, setDismissed] = useState(() => !!localStorage.getItem(GUIA_KEY))
-  const [abierto,   setAbierto]   = useState(null) // id del paso abierto
+function timeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 2)  return 'justo ahora'
+  if (mins < 60) return `hace ${mins} min`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24)  return `hace ${hrs}h`
+  return `hace ${Math.floor(hrs / 24)}d`
+}
 
-  const tieneCuentas     = Object.keys(state.saldosIniciales || {}).length > 0
-  const tieneMovimiento  = (state.transacciones || []).length > 0
-  const tienePresupuesto = Object.values(state.presupuestos || {}).some(m => Object.values(m || {}).some(v => v > 0))
-  const tieneHistorial   = tieneMovimiento
-  const tieneTC          = (state.tarjetas || []).length > 0
-  const tieneAhorro      = Object.values(state.metas || {}).some(m => (m.ahorro || 0) > 0) || (state.metasPersonalizadas || []).length > 0
+function NovedadBanner() {
+  const [novedad,  setNovedad]  = useState(null)
+  const [visible,  setVisible]  = useState(false)
+
+  useEffect(() => {
+    supabase
+      .from('novedades')
+      .select('*')
+      .eq('activa', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return
+        const seen = localStorage.getItem('dani_fin_novedad_' + data.id)
+        if (!seen) { setNovedad(data); setVisible(true) }
+      })
+  }, [])
+
+  function dismiss() {
+    localStorage.setItem('dani_fin_novedad_' + novedad.id, '1')
+    setVisible(false)
+  }
+
+  if (!visible || !novedad) return null
+
+  return (
+    <Box sx={{
+      bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH,
+      border: `1px solid ${BORDER}`, overflow: 'hidden', mb: 2,
+    }}>
+      {/* Header */}
+      <Box sx={{ px: 2.5, pt: 2, pb: 1.25, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ width: 32, height: 32, borderRadius: '8px', bgcolor: '#F0FDF4', border: `1px solid ${GREEN}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Typography sx={{ fontSize: 16, lineHeight: 1 }}>🆕</Typography>
+          </Box>
+          <Box>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, color: T1, lineHeight: 1.2 }}>Novedades de la app</Typography>
+            <Typography sx={{ fontSize: 11, color: T2 }}>{timeAgo(novedad.created_at)}</Typography>
+          </Box>
+        </Box>
+        <Box onClick={dismiss} sx={{ cursor: 'pointer', color: T2, p: 0.25, flexShrink: 0, '&:hover': { color: T1 } }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </Box>
+      </Box>
+
+      {/* Mensaje */}
+      <Box sx={{ px: 2.5, pb: 2 }}>
+        <Typography sx={{ fontSize: 13, color: T1, lineHeight: 1.65 }}>{novedad.mensaje}</Typography>
+      </Box>
+    </Box>
+  )
+}
+
+function PrimerosPasos({ state, navigate }) {
+  const { guiaPasos, markGuiaPaso } = useFeatures()
+  const [dismissed,  setDismissed]  = useState(() => !!localStorage.getItem(GUIA_KEY))
+  const [abierto,    setAbierto]    = useState(null)
 
   const doneMap = {
     cuenta:          true,
-    config:          false,
-    presupuesto:     false,
-    registro:        false,
-    historial:       false,
-    tc:              false,
-    'deudas-ahorro': false,
+    config:          guiaPasos.has('config'),
+    presupuesto:     guiaPasos.has('presupuesto'),
+    registro:        guiaPasos.has('registro'),
+    historial:       guiaPasos.has('historial'),
+    tc:              guiaPasos.has('tc'),
+    'deudas-ahorro': guiaPasos.has('deudas-ahorro'),
   }
 
   const completados = Object.values(doneMap).filter(Boolean).length
   const total       = MINI_TUTORIALES.length
   const todoListo   = completados === total
+
+  useEffect(() => {
+    if (!todoListo) return
+    const t = setTimeout(() => {
+      localStorage.setItem(GUIA_KEY, '1')
+      setDismissed(true)
+    }, 1800)
+    return () => clearTimeout(t)
+  }, [todoListo])
 
   if (dismissed) return null
 
@@ -147,6 +220,11 @@ function PrimerosPasos({ state, navigate }) {
 
   function toggle(id) {
     setAbierto(prev => prev === id ? null : id)
+  }
+
+  function marcarYNavegar(paso) {
+    markGuiaPaso(paso.id)
+    navigate(paso.path)
   }
 
   return (
@@ -253,7 +331,7 @@ function PrimerosPasos({ state, navigate }) {
                   {/* Botón ir a sección */}
                   {paso.path && (
                     <Box
-                      onClick={() => navigate(paso.path)}
+                      onClick={() => marcarYNavegar(paso)}
                       sx={{
                         display: 'inline-flex', alignItems: 'center', gap: 0.75,
                         px: 2, py: 0.875, borderRadius: '10px', cursor: 'pointer',
@@ -319,11 +397,33 @@ function SectionLabel({ children }) {
   )
 }
 
+// ── Error boundary — para que un error de cálculo no deje la pantalla en
+// blanco; muestra el mensaje para poder diagnosticarlo sin abrir la consola.
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null } }
+  static getDerivedStateFromError(e) { return { error: e } }
+  render() {
+    if (this.state.error) return (
+      <Box sx={{ p: 4 }}>
+        <Typography sx={{ color: RED, fontWeight: 700, mb: 1 }}>Hubo un error mostrando Inicio</Typography>
+        <Typography sx={{ fontFamily: 'monospace', fontSize: 12, color: T2, whiteSpace: 'pre-wrap' }}>{this.state.error.message}</Typography>
+        <Typography sx={{ fontFamily: 'monospace', fontSize: 10, color: T2, mt: 1.5, whiteSpace: 'pre-wrap' }}>{this.state.error.stack}</Typography>
+      </Box>
+    )
+    return this.props.children
+  }
+}
+
 export default function Inicio() {
+  return <ErrorBoundary><InicioInner /></ErrorBoundary>
+}
+
+function InicioInner() {
   const navigate = useNavigate()
   const { state, mesActivo, setMesActivo, closeMonth, getCarryOver, getCierre, deleteCierre } = useFinanzas()
   const [desglose, setDesglose] = useState(false)
   const [confirmCierre, setConfirmCierre] = useState(false)
+  const mesActivoRef = useRef(null)
 
   const mes        = mesActivo
   const mesIdx     = parseInt(mes.replace('M', '')) - 1
@@ -338,7 +438,9 @@ export default function Inicio() {
   // Métricas
   const metrics  = useMemo(() => computeMetrics(state.transacciones || [], mes), [state.transacciones, mes])
   const presupMes = state.presupuestos?.[mes] || {}
-  const balance   = metrics.neto
+  // Solo dinero realmente cobrado (excluye ingresos pendientes/futuros) — debe
+  // coincidir con lo que closeMonth() traslada al mes siguiente
+  const balance   = metrics.ingRecibidos - metrics.egCash
   const positivo  = balance >= 0
   const balColor  = positivo ? GREEN : RED
 
@@ -347,64 +449,25 @@ export default function Inicio() {
   const cierreMes    = getCierre(mes)
   const hayCarryOver = carryOver !== 0
   const esDeuda      = carryOver < 0
+  // Lo que realmente se traslada al cerrar = lo que ya traía + el resultado de este mes
+  const carryOverAlCerrar = carryOver + balance
 
-  // Flujo de caja real (después de carryOver para poder usarlo)
-  const disponibleHoy = useMemo(
-    () => computeDisponibleHoy(state.transacciones || [], mes, carryOver),
-    [state.transacciones, mes, carryOver]
-  )
   const proximosPagos = useMemo(() => computeProximosPagos(state.transacciones || []),                [state.transacciones])
   const alertas       = useMemo(() => computeAlertas(state.transacciones || [], mes, carryOver),      [state.transacciones, mes, carryOver])
 
-  const egFijoPres = Object.keys(presupMes).filter(k => state.categoriasEgresoFijo?.includes(k)).reduce((s, k) => s + (presupMes[k] || 0), 0)
-  const egVarPres  = Object.keys(presupMes).filter(k => state.categoriasEgresoVariable?.includes(k)).reduce((s, k) => s + (presupMes[k] || 0), 0)
-  const ingPres    = Object.keys(presupMes).filter(k => state.categoriasIngreso?.includes(k)).reduce((s, k) => s + (presupMes[k] || 0), 0)
-  const egPresPlan = egFijoPres + egVarPres
-  // Ingresos recibidos: usa presupuestosDetalle para no contar ingresos no presupuestados
-  const ingRecibidoPresup = useMemo(() => {
-    const txs = state.transacciones || []
-    const detalleIngresos = (state.presupuestosDetalle?.[mes] || [])
-      .filter(i => state.categoriasIngreso?.includes(i.categoria))
-    if (detalleIngresos.length > 0) {
-      return detalleIngresos.reduce((total, item) => {
-        if (item.pagadoCon) {
-          // Ya vinculado: usa el monto de la transacción vinculada
-          const tx = item.txId ? txs.find(t => t.id === item.txId) : null
-          return total + (tx ? Math.abs(tx.total) : item.monto)
-        }
-        // Aún no vinculado: busca transacción por concepto exacto, capeado al presupuesto
-        const concepto = item.concepto
-        if (concepto) {
-          const recibido = txs
-            .filter(t => t.mes === mes && t.movimiento === 'Ingreso' && t.concepto === concepto)
-            .reduce((s, t) => s + Math.abs(t.total), 0)
-          return total + Math.min(recibido, item.monto)
-        }
-        return total
-      }, 0)
-    }
-    // Sin detalle: capeado al presupuesto por categoría
-    return Object.keys(presupMes)
-      .filter(k => state.categoriasIngreso?.includes(k))
-      .reduce((total, cat) => {
-        const presupCat = presupMes[cat] || 0
-        const recibidoCat = txs
-          .filter(t => t.mes === mes && t.movimiento === 'Ingreso' && t.categoria === cat)
-          .reduce((s, t) => s + Math.abs(t.total), 0)
-        return total + Math.min(recibidoCat, presupCat)
-      }, 0)
-  }, [state.presupuestosDetalle, state.transacciones, presupMes, mes, state.categoriasIngreso])
+  // Proyección fin de mes — misma fuente que usa Registrar, para que ambas
+  // pantallas siempre muestren el mismo número.
+  const {
+    disponibleHoy, ingresosPendientes, gastosPendientes, tcPorPagar,
+    proyeccion: proyeccionFinMes, margenPlan, ingPres, egPresPlan, egFijoPres, egVarPres, ingRecibidoPresup,
+  } = useMemo(
+    () => computeProyeccionMes(state.transacciones || [], mes, carryOver, presupMes, state.presupuestosDetalle, state.categoriasIngreso, state.categoriasEgresoFijo, state.categoriasEgresoVariable),
+    [state.transacciones, mes, carryOver, presupMes, state.presupuestosDetalle, state.categoriasIngreso, state.categoriasEgresoFijo, state.categoriasEgresoVariable]
+  )
 
   const ingPresDetalle = ingPres
-  const margenPlan = ingPres - egPresPlan  // plan puro: ingresos presupuestados - egresos presupuestados
   const pctGastado = egPresPlan > 0 ? Math.min(metrics.eg / egPresPlan, 1) : 0
   const hayPresup  = ingPres > 0 || egPresPlan > 0
-
-  // Proyección fin de mes: disponible hoy + ingresos presupuestados aún no recibidos − gastos que faltan pagar
-  const ingresosPendientes = Math.max(ingPres - ingRecibidoPresup, 0)
-  const gastosPendientes = Math.max(egPresPlan - metrics.eg, 0)
-  const tcPorPagar = Math.max((metrics.tcEg || 0) - (metrics.pagoTC || 0), 0)
-  const proyeccionFinMes = disponibleHoy + ingresosPendientes - gastosPendientes - tcPorPagar
   const proyColor = proyeccionFinMes < 0 ? RED : proyeccionFinMes < margenPlan * 0.8 ? '#F59E0B' : GREEN
   const difVsPlan = proyeccionFinMes - margenPlan
 
@@ -425,7 +488,7 @@ export default function Inicio() {
   const habitosData = useMemo(() => {
     const hab    = ls('hab_habitos') || []
     const activos = hab.filter(h => h.activo !== false)
-    const todayKey = new Date().toISOString().split('T')[0]
+    const todayKey = new Date().toLocaleDateString('en-CA')
     const done   = (ls('hab_done') || {})[todayKey] || []
     return { done: activos.filter(h => done.includes(h.id)).length, total: activos.length }
   }, [])
@@ -454,6 +517,12 @@ export default function Inicio() {
   // Banner (solo negativo)
   const bannerNeg = balance < 0 && metrics.hasData
 
+  // Centra el mes activo en el selector horizontal (si no, el scroll siempre
+  // arranca en Enero y el mes seleccionado puede quedar fuera de vista)
+  useEffect(() => {
+    mesActivoRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+  }, [mes])
+
   return (
     <Box sx={{ bgcolor: BG, minHeight: '100%', pb: 6 }}>
       <Box sx={{ maxWidth: 600, mx: 'auto', px: '20px' }}>
@@ -474,7 +543,7 @@ export default function Inicio() {
             const activo   = m === mes
             const tieneDatos = mesesConDatos.includes(m)
             return (
-              <Box key={m} onClick={() => setMesActivo(m)} sx={{
+              <Box key={m} ref={activo ? mesActivoRef : null} onClick={() => setMesActivo(m)} sx={{
                 px: 1.75, py: 0.625, borderRadius: '20px', fontSize: 12, fontWeight: 600,
                 whiteSpace: 'nowrap', cursor: 'pointer', border: '1px solid', flexShrink: 0, transition: 'all 0.15s',
                 borderColor: activo ? T1 : BORDER,
@@ -494,21 +563,37 @@ export default function Inicio() {
         {/* ── Alertas ── */}
         <AlertasBanner alertas={alertas} />
 
+        {/* ── Novedades de la app ── */}
+        <NovedadBanner />
+
         {/* ── Guía primeros pasos (solo usuarios nuevos) ── */}
         <PrimerosPasos state={state} navigate={navigate} />
 
-        {/* ── Hero: Disponible HOY ── */}
-        <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 2 }}>
+        {/* ── Hero: Disponible HOY (incluye saldo/deuda trasladada + cierre de mes) ── */}
+        <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 3 }}>
           <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.5 }}>
             Disponible hoy
           </Typography>
           <Typography sx={{ fontSize: 38, fontWeight: 800, color: disponibleHoy >= 0 ? GREEN : RED, letterSpacing: '-1.5px', lineHeight: 1 }}>
             {disponibleHoy >= 0 ? '' : '−'}{formatMoney(Math.abs(disponibleHoy))}
           </Typography>
+
+          {/* Saldo/deuda trasladada — chip compacto, no un número "total" aparte:
+              ya está sumado dentro de "Disponible hoy" de arriba. */}
           {hayCarryOver && (
-            <Typography sx={{ fontSize: 12, color: T2, mt: 0.4 }}>
-              Incluye {formatMoneyShort(carryOver)} del mes anterior
-            </Typography>
+            <Box sx={{
+              display: 'inline-flex', alignItems: 'center', gap: 0.5, mt: 1,
+              px: 1.1, py: 0.4, borderRadius: '20px',
+              bgcolor: esDeuda ? '#FEF2F2' : '#F0FDF4',
+            }}>
+              <Typography sx={{ fontSize: 11 }}>{esDeuda ? '🔴' : '💰'}</Typography>
+              <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: esDeuda ? RED : GREEN }}>
+                {esDeuda ? '−' : '+'}{formatMoneyShort(Math.abs(carryOver))}
+              </Typography>
+              <Typography sx={{ fontSize: 11, color: T2 }}>
+                {esDeuda ? 'deuda de' : 'de'} {MES_NAMES[parseInt(mes.replace('M','')) - 2] || 'antes'}
+              </Typography>
+            </Box>
           )}
 
           {/* Desglose colapsable */}
@@ -518,8 +603,16 @@ export default function Inicio() {
             </Typography>
           </Box>
 
-          <Box sx={{ overflow: 'hidden', maxHeight: desglose ? 240 : 0, transition: 'max-height 0.3s ease' }}>
+          <Box sx={{ overflow: 'hidden', maxHeight: desglose ? 280 : 0, transition: 'max-height 0.3s ease' }}>
             <Box sx={{ pt: 1.75, mt: 1.5, borderTop: `1px solid #F0F0F0`, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {hayCarryOver && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <Typography sx={{ fontSize: 13, color: T2 }}>{esDeuda ? 'Deuda trasladada' : 'Saldo trasladado'}</Typography>
+                  <Typography sx={{ fontSize: 14, fontWeight: 600, color: esDeuda ? RED : GREEN }}>
+                    {esDeuda ? '−' : '+'}{formatMoneyShort(Math.abs(carryOver))}
+                  </Typography>
+                </Box>
+              )}
               {[
                 { label: 'Ingresos recibidos', real: metrics.ing,        pres: 0          },
                 { label: 'Egresos fijos',       real: metrics.fijos,     pres: egFijoPres },
@@ -566,48 +659,9 @@ export default function Inicio() {
               })()}
             </Box>
           </Box>
-        </Box>
 
-        {/* ── Saldo Trasladado ── */}
-        {(hayCarryOver || metrics.hasData) && (
-          <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 3 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.75 }}>
-              Disponible {mesNombre}
-            </Typography>
-
-            {/* Saldo trasladado */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.25 }}>
-              <Box>
-                <Typography sx={{ fontSize: 13, color: T1, fontWeight: 500 }}>
-                  {esDeuda ? 'Deuda trasladada' : 'Saldo trasladado'}
-                </Typography>
-                {hayCarryOver && (
-                  <Typography sx={{ fontSize: 11, color: T2, mt: 0.25 }}>
-                    {esDeuda ? '🔴' : '💰'} {esDeuda ? 'Deuda heredada de' : 'Dinero heredado de'} {MES_NAMES[parseInt(mes.replace('M','')) - 2] || 'mes anterior'}
-                  </Typography>
-                )}
-              </Box>
-              <Typography sx={{ fontSize: 15, fontWeight: 700, color: hayCarryOver ? (esDeuda ? RED : GREEN) : T2 }}>
-                {hayCarryOver ? formatMoney(Math.abs(carryOver)) : '$ 0'}
-              </Typography>
-            </Box>
-
-            {/* Disponible total */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Box>
-                <Typography sx={{ fontSize: 14, fontWeight: 700, color: T1 }}>
-                  {esDeuda ? 'Deuda pendiente' : 'Disponible total'}
-                </Typography>
-                <Typography sx={{ fontSize: 11, color: T2, mt: 0.25 }}>
-                  {esDeuda ? 'Deuda heredada del mes anterior' : 'Saldo heredado del mes anterior'}
-                </Typography>
-              </Box>
-              <Typography sx={{ fontSize: 22, fontWeight: 800, color: hayCarryOver ? (esDeuda ? RED : GREEN) : T2, letterSpacing: '-0.5px' }}>
-                {esDeuda ? '−' : ''}{formatMoney(Math.abs(carryOver))}
-              </Typography>
-            </Box>
-
-            {/* Cerrar mes / cierre existente */}
+          {/* Cerrar mes / cierre existente */}
+          {metrics.hasData && (
             <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BORDER}` }}>
               {cierreMes ? (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -640,10 +694,15 @@ export default function Inicio() {
                   ) : (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                       <Typography sx={{ fontSize: 12, color: T1 }}>
-                        Balance: <strong style={{ color: balance >= 0 ? GREEN : RED }}>{formatMoney(balance)}</strong>
-                        {balance > 0
-                          ? ` → se trasladan ${formatMoney(balance)} como ahorro`
-                          : ` → se traslada deuda de ${formatMoney(Math.abs(balance))}`}
+                        Resultado de {mesNombre}: <strong style={{ color: balance >= 0 ? GREEN : RED }}>{formatMoney(balance)}</strong>
+                        {hayCarryOver && (
+                          <> {carryOver >= 0 ? '+' : '−'} {formatMoney(Math.abs(carryOver))} de {mesNombre === MES_NAMES[0] ? 'antes' : 'meses anteriores'}</>
+                        )}
+                      </Typography>
+                      <Typography sx={{ fontSize: 12, color: T1 }}>
+                        {carryOverAlCerrar >= 0
+                          ? <>→ se trasladan <strong style={{ color: GREEN }}>{formatMoney(carryOverAlCerrar)}</strong> como ahorro</>
+                          : <>→ se traslada deuda de <strong style={{ color: RED }}>{formatMoney(Math.abs(carryOverAlCerrar))}</strong></>}
                       </Typography>
                       <Box sx={{ display: 'flex', gap: 1 }}>
                         <Box
@@ -664,30 +723,28 @@ export default function Inicio() {
                 </Box>
               )}
             </Box>
-          </Box>
-        )}
+          )}
+        </Box>
 
-        {/* ── Flujo por cuenta ── */}
+        {/* ── Flujo por cuenta — scroll horizontal compacto, mismo patrón que
+             "Accesos rápidos" más abajo, para no apilar otra lista vertical ── */}
         {saldosCuenta.length > 0 && (
-          <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 3 }}>
-            <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.5 }}>
-              Flujo por cuenta · {mesNombre}
-            </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {saldosCuenta.map(({ cuenta, ing, eg, neto }, i) => (
+          <Box sx={{ mb: 3 }}>
+            <SectionLabel>Flujo por cuenta · {mesNombre}</SectionLabel>
+            <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, pb: 0.5, mx: '-20px', px: '20px' }}>
+              {saldosCuenta.map(({ cuenta, ing, eg, neto }) => (
                 <Box key={cuenta} sx={{
-                  display: 'grid', gridTemplateColumns: '1fr auto',
-                  alignItems: 'center', gap: 1, py: 1.25,
-                  borderBottom: i < saldosCuenta.length - 1 ? `1px solid #F0F0F0` : 'none',
+                  flexShrink: 0, minWidth: 136, bgcolor: CARD, borderRadius: '14px',
+                  boxShadow: CARD_SH, border: `1px solid ${BORDER}`, p: 1.5,
                 }}>
-                  <Box>
-                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: T1 }}>{cuenta}</Typography>
-                    <Typography sx={{ fontSize: 11, color: T2, mt: 0.2 }}>
-                      +{formatMoneyShort(ing)} entradas · −{formatMoneyShort(eg)} salidas
-                    </Typography>
-                  </Box>
-                  <Typography sx={{ fontSize: 15, fontWeight: 700, color: neto >= 0 ? GREEN : RED }}>
-                    {neto >= 0 ? '+' : '−'}{formatMoney(Math.abs(neto))}
+                  <Typography sx={{ fontSize: 12, fontWeight: 600, color: T1, lineHeight: 1.2, mb: 0.6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {cuenta}
+                  </Typography>
+                  <Typography sx={{ fontSize: 17, fontWeight: 800, color: neto >= 0 ? GREEN : RED, letterSpacing: '-0.3px', lineHeight: 1 }}>
+                    {neto >= 0 ? '+' : '−'}{formatMoneyShort(Math.abs(neto))}
+                  </Typography>
+                  <Typography sx={{ fontSize: 10, color: T2, mt: 0.5 }}>
+                    +{formatMoneyShort(ing)} · −{formatMoneyShort(eg)}
                   </Typography>
                 </Box>
               ))}
@@ -704,7 +761,7 @@ export default function Inicio() {
             <Typography sx={{ fontSize: 14, color: T2, mb: 1.5 }}>
               Sin presupuesto configurado para este mes
             </Typography>
-            <Box onClick={() => navigate('/presupuesto')} sx={{ display: 'inline-block', cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
+            <Box onClick={() => navigate('/finanzas/presupuesto')} sx={{ display: 'inline-block', cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
               <Typography sx={{ fontSize: 13, fontWeight: 500, color: GREEN }}>Ir a Presupuesto →</Typography>
             </Box>
           </Box>
@@ -852,7 +909,7 @@ export default function Inicio() {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.25 }}>
             <SectionLabel>Últimos movimientos</SectionLabel>
             {recientes.length > 0 && (
-              <Box onClick={() => navigate('/historial')} sx={{ mb: 1.25, cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
+              <Box onClick={() => navigate('/finanzas/historial')} sx={{ mb: 1.25, cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
                 <Typography sx={{ fontSize: 13, color: GREEN, fontWeight: 500 }}>Ver todo →</Typography>
               </Box>
             )}
@@ -861,7 +918,7 @@ export default function Inicio() {
           {recientes.length === 0 ? (
             <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 3, textAlign: 'center' }}>
               <Typography sx={{ fontSize: 14, color: T2, mb: 1.5 }}>Aún no hay movimientos</Typography>
-              <Box onClick={() => navigate('/registro')} sx={{
+              <Box onClick={() => navigate('/finanzas/registro')} sx={{
                 display: 'inline-block', px: 2.5, py: 1, borderRadius: '10px',
                 bgcolor: GREEN, cursor: 'pointer', '&:active': { opacity: 0.85 },
               }}>
@@ -875,7 +932,7 @@ export default function Inicio() {
                 const catColor  = CAT_COLORS[tx.categoria] || '#919EAB'
                 const monto     = Math.abs(tx.total || tx.monto || 0)
                 return (
-                  <Box key={tx.id} onClick={() => navigate('/historial')} sx={{
+                  <Box key={tx.id} onClick={() => navigate('/finanzas/historial')} sx={{
                     display: 'flex', alignItems: 'center', gap: 1.5,
                     px: 2, py: 1.375, cursor: 'pointer', '&:active': { opacity: 0.8 },
                     borderBottom: i < recientes.length - 1 ? `1px solid ${BORDER}` : 'none',

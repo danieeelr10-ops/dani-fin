@@ -25,13 +25,13 @@ import Mercado from './pages/Mercado';
 import Habitos from './pages/Habitos';
 import Seed from './pages/Seed';
 import Inversiones from './pages/Inversiones';
-import FlujoDeCaja from './pages/FlujoDeCaja';
 import Reportes from './pages/Reportes';
 import Deudas from './pages/Deudas';
 import Apuntes from './pages/Apuntes';
 import Cuentas from './pages/Cuentas';
 import Analisis from './pages/Analisis';
 import Ahorro from './pages/Ahorro';
+import Patrimonio from './pages/Patrimonio';
 import Admin from './pages/Admin';
 import Ritual from './pages/Ritual';
 import Planificador from './pages/Planificador';
@@ -100,10 +100,10 @@ function AuthenticatedApp() {
               <Route path="tc"          element={<TC />} />
               <Route path="deudas"      element={<Deudas />} />
               <Route path="ahorro"      element={<Ahorro />} />
+              <Route path="patrimonio"  element={<Patrimonio />} />
               <Route path="analisis"    element={<Analisis />} />
               <Route path="inversiones" element={<Inversiones />} />
               <Route path="mercado"     element={<Mercado />} />
-              <Route path="flujo"       element={<FlujoDeCaja />} />
               <Route path="dashboard"   element={<Dashboard />} />
               <Route path="reportes"    element={<Reportes />} />
               <Route path="metas"       element={<Metas />} />

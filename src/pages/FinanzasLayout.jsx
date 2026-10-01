@@ -15,13 +15,10 @@ const TABS = [
   { path: 'presupuesto',  featureKey: 'presupuesto', label: 'Presupuesto' },
   { path: 'tc',           featureKey: 'tc',          label: 'T.C' },
   { path: 'deudas',       featureKey: 'deudas',      label: 'Deudas' },
-  { path: 'ahorro',       featureKey: 'ahorro',      label: 'Ahorro' },
-  { path: 'inversiones',  featureKey: null,           label: 'Inversiones' },
+  { path: 'patrimonio',   featureKey: null,           label: 'Patrimonio' },
   { path: 'analisis',     featureKey: 'analisis',    label: 'Análisis' },
   { path: 'mercado',      featureKey: null,           label: 'Mercado' },
-  { path: 'flujo',        featureKey: null,           label: 'Flujo' },
   { path: 'reportes',     featureKey: null,           label: 'Reportes' },
-  { path: 'metas',        featureKey: null,           label: 'Metas $' },
   { path: 'cuentas',      featureKey: null,           label: 'Cuentas bancarias' },
   { path: 'apuntes',      featureKey: null,           label: 'Cuentas' },
 ]
@@ -36,20 +33,25 @@ export default function FinanzasLayout() {
 
   const visibleTabs = TABS.filter(t => !t.featureKey || hasFeature(t.featureKey))
 
+  function goTo(t) {
+    navigate(t.path ? `${base}/${t.path}` : base)
+  }
+
   return (
     <Box>
       <Box sx={{ px: 2, pt: 2.5, pb: 1 }}>
         <Typography sx={{ fontSize: 22, fontWeight: 700, color: T1, letterSpacing: '-0.3px' }}>Finanzas</Typography>
       </Box>
 
+      {/* ── Mobile: pestañas horizontales (poco ancho para un panel lateral) ── */}
       <Box sx={{
-        display: 'flex', gap: 0.75, px: 2, pb: 1.5, overflowX: 'auto',
+        display: { xs: 'flex', md: 'none' }, gap: 0.75, px: 2, pb: 1.5, overflowX: 'auto',
         '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none',
       }}>
         {visibleTabs.map(t => {
           const active = activeSub === t.path
           return (
-            <Box key={t.path || 'resumen'} onClick={() => navigate(t.path ? `${base}/${t.path}` : base)} sx={{
+            <Box key={t.path || 'resumen'} onClick={() => goTo(t)} sx={{
               flexShrink: 0, px: 1.5, py: 0.625, borderRadius: '20px', cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
               border: '1px solid', borderColor: active ? GREEN : BORDER,
               bgcolor: active ? 'rgba(0,167,111,0.08)' : CARD, color: active ? GREEN : T2,
@@ -59,7 +61,31 @@ export default function FinanzasLayout() {
         })}
       </Box>
 
-      <Outlet />
+      {/* ── Desktop: panel vertical a la izquierda + contenido a la derecha ── */}
+      <Box sx={{ display: { xs: 'block', md: 'flex' }, alignItems: 'flex-start' }}>
+        <Box sx={{
+          display: { xs: 'none', md: 'flex' }, flexDirection: 'column', gap: 0.25,
+          width: 196, flexShrink: 0, py: 0.5, px: 1.5,
+          position: 'sticky', top: 12, maxHeight: 'calc(100vh - 24px)', overflowY: 'auto',
+        }}>
+          {visibleTabs.map(t => {
+            const active = activeSub === t.path
+            return (
+              <Box key={t.path || 'resumen'} onClick={() => goTo(t)} sx={{
+                px: 1.5, py: 1, borderRadius: '10px', cursor: 'pointer', fontSize: 13.5, fontWeight: 600,
+                borderLeft: '3px solid', borderLeftColor: active ? GREEN : 'transparent',
+                bgcolor: active ? 'rgba(0,167,111,0.08)' : 'transparent',
+                color: active ? GREEN : T2, transition: 'all 0.12s',
+                '&:hover': { bgcolor: active ? 'rgba(0,167,111,0.08)' : '#F3F4F6', color: active ? GREEN : T1 },
+              }}>{t.label}</Box>
+            )
+          })}
+        </Box>
+
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Outlet />
+        </Box>
+      </Box>
     </Box>
   )
 }
