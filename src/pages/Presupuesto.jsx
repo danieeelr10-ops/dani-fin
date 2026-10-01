@@ -66,6 +66,7 @@ function CollapsibleSection({ label, summary, defaultOpen = true, children }) {
 
 // ── Lista limpia de categorías ─────────────────────────────
 function CatListSection({ cats, presupuestoMes, actualVals, isIngreso = false, onEditCat }) {
+  const navigate = useNavigate();
   if (cats.length === 0) return null;
   return (
     <Box sx={{ bgcolor: '#fff', borderRadius: '12px', boxShadow: CARD_SH, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
@@ -103,6 +104,15 @@ function CatListSection({ cats, presupuestoMes, actualVals, isIngreso = false, o
                 </Box>
               ) : (
                 <Typography sx={{ fontSize: 11, color: T2, mt: 0.2, opacity: 0.75 }}>Sin meta · toca para configurar</Typography>
+              )}
+              {cat === 'Ahorro' && (
+                <Box onClick={e => { e.stopPropagation(); navigate('/finanzas/ahorro'); }} sx={{
+                  display: 'inline-flex', alignItems: 'center', gap: 0.375, mt: 0.625,
+                  px: 1, py: 0.25, borderRadius: '20px', bgcolor: 'rgba(0,167,111,0.08)',
+                  '&:active': { opacity: 0.7 },
+                }}>
+                  <Typography sx={{ fontSize: 10.5, fontWeight: 700, color: GREEN }}>Ver mi ahorro →</Typography>
+                </Box>
               )}
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
@@ -636,7 +646,7 @@ function GuiaPresupuesto({ presupMes, catIngreso, catFijo, catVariable, navigate
             </Box>
           )}
           {todoListo && (
-            <Box onClick={() => { dismiss(); navigate('/inicio') }} sx={{
+            <Box onClick={() => { dismiss(); navigate('/finanzas') }} sx={{
               display: 'flex', alignItems: 'center', gap: 0.5,
               px: 1.75, py: 0.875, borderRadius: '10px', cursor: 'pointer',
               bgcolor: GREEN, color: '#fff', fontSize: 13, fontWeight: 700,
