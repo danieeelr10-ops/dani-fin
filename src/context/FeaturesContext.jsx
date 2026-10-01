@@ -20,7 +20,6 @@ export const ALL_FEATURES = {
   config:      { label: 'Config',       default: true },
   apuntes:     { label: 'Apuntes',      default: true },
   habitos:     { label: 'Hábitos',      default: true },
-  ritual:      { label: 'Ritual Matutino', default: true },
   planificador:{ label: 'Planificador', default: true },
   metasVida:   { label: 'Metas de Vida', default: true },
   ruedaVida:   { label: 'Rueda de la Vida', default: true },

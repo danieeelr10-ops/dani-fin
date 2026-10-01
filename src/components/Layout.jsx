@@ -228,15 +228,6 @@ const ALL_TABS = [
     </svg>,
   },
   {
-    path: '/ritual', featureKey: 'ritual', label: 'Ritual',
-    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-      <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-    </svg>,
-  },
-  {
     path: '/planificador', featureKey: 'planificador', label: 'Planificador',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
@@ -363,7 +354,7 @@ export default function Layout({ children }) {
 
   // Grupos del drawer "Más" mobile — filtrado por features
   const DRAWER_GROUPS_DEF = [
-    { label: 'Organización', items: ['/ritual', '/planificador', '/metas-vida', '/rueda-vida', '/notas'] },
+    { label: 'Organización', items: ['/planificador', '/metas-vida', '/rueda-vida', '/notas'] },
     { label: 'Más',          items: ['/apuntes', '/ia', '/config'] },
     ...(isAdmin ? [{ label: 'Admin', items: ['/admin'] }] : []),
   ];

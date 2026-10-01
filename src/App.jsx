@@ -33,7 +33,6 @@ import Analisis from './pages/Analisis';
 import Ahorro from './pages/Ahorro';
 import Patrimonio from './pages/Patrimonio';
 import Admin from './pages/Admin';
-import Ritual from './pages/Ritual';
 import Planificador from './pages/Planificador';
 import MetasVida from './pages/MetasVida';
 import RuedaDeVida from './pages/RuedaDeVida';
@@ -112,7 +111,6 @@ function AuthenticatedApp() {
             </Route>
 
             <Route path="/habitos"     element={<Habitos />} />
-            <Route path="/ritual"        element={<Ritual />} />
             <Route path="/planificador"  element={<Planificador />} />
             <Route path="/metas-vida"    element={<MetasVida />} />
             <Route path="/rueda-vida"    element={<RuedaDeVida />} />

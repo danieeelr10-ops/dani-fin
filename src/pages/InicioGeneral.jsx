@@ -54,10 +54,6 @@ export default function InicioGeneral() {
   // Finanzas
   const fin = useMemo(() => computeMetrics(state.transacciones, mesActual), [state.transacciones, mesActual])
 
-  // Ritual
-  const [ritual] = useSyncedState('rumbo_ritual_v1', {})
-  const ritualHoy = !!ritual[hoy]?.completado
-
   // Planificador
   const [planif] = useSyncedState('rumbo_planificador_v1', {})
   const tareasHoy = planif[hoy] || []
@@ -101,13 +97,6 @@ export default function InicioGeneral() {
             icon="💰" title="Finanzas" color="#3B82F6"
             subtitle={`Este mes: ${formatMoneyShort(fin.ing)} ingresos · ${formatMoneyShort(fin.eg)} gastos`}
             onClick={() => navigate('/finanzas')}
-          />
-
-          <SummaryCard
-            icon="☀️" title="Ritual Matutino" color="#F59E0B"
-            subtitle={ritualHoy ? 'Completado hoy ✓' : 'Todavía no lo hiciste hoy'}
-            right={!ritualHoy && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#F59E0B' }} />}
-            onClick={() => navigate('/ritual')}
           />
 
           <SummaryCard
