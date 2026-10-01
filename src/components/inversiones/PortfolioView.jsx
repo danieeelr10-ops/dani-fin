@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Box, Typography, alpha } from '@mui/material'
 import { supabase } from 'src/lib/supabase'
+import { useSnackbar } from 'src/context/SnackbarContext'
 
 const T1 = '#111318'
 const T2 = '#6B7280'
@@ -39,6 +40,7 @@ export default function PortfolioView({
   onDeletePosition,
   onAddAporte, onDeleteAporte,
 }) {
+  const { showSnackbar } = useSnackbar()
   const [showForm, setShowForm]       = useState(false)
   const [modoInput, setModoInput]     = useState('COP')
   const [form, setForm]               = useState(EMPTY_FORM)
@@ -119,7 +121,8 @@ export default function PortfolioView({
     const pctGan        = invertido > 0 ? (ganancia / invertido) * 100 : 0
     const pctPortfolio  = totalActualUSD > 0 ? (valorActual / totalActualUSD) * 100 : 0
     const aportesT      = [...aportes.filter(a => a.ticker === p.ticker)].sort((a, b) => b.fecha.localeCompare(a.fecha))
-    return { ...p, precioActual, valorActual, invertido, ganancia, pctGan, pctPortfolio, aportesT, color: BAR_COLORS[idx % BAR_COLORS.length] }
+    const ultimaCompra  = aportesT[0] || null
+    return { ...p, precioActual, valorActual, invertido, ganancia, pctGan, pctPortfolio, aportesT, ultimaCompra, color: BAR_COLORS[idx % BAR_COLORS.length] }
   })
 
   // ── Form ──────────────────────────────────────────────────────
@@ -142,6 +145,8 @@ export default function PortfolioView({
       precioCompra: precioNum,
       shares: sharesCalc,
     })
+    showSnackbar(`${resolvedTicker} · ${fmtDate(form.fecha)} a $${fmt(precioNum)}/acc`, 'success')
+    setExpanded(e => ({ ...e, [resolvedTicker]: true }))
     setForm(EMPTY_FORM)
     setNewTickerInput('')
     setShowForm(false)
@@ -233,8 +238,13 @@ export default function PortfolioView({
                   <Box>
                     <Typography sx={{ fontSize: 15, fontWeight: 700, color: T1 }}>{td.ticker}</Typography>
                     <Typography sx={{ fontSize: 11, color: T2 }}>
-                      {td.shares.toFixed(5)} acc · ${fmt(td.precioActual)}/acc
+                      {td.shares.toFixed(5)} acc · ${fmt(td.precioActual)}/acc hoy
                     </Typography>
+                    {td.ultimaCompra && (
+                      <Typography sx={{ fontSize: 10.5, color: T2, mt: 0.15 }}>
+                        Última compra {fmtDate(td.ultimaCompra.fecha)} a ${fmt(td.ultimaCompra.precioCompra)}/acc
+                      </Typography>
+                    )}
                   </Box>
                   <Box sx={{ textAlign: 'right' }}>
                     <Typography sx={{ fontSize: 16, fontWeight: 800, color: T1 }}>${fmt(td.valorActual)}</Typography>
