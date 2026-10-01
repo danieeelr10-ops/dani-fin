@@ -3,6 +3,7 @@ import { Box, Typography } from '@mui/material'
 import PortfolioView from 'src/components/inversiones/PortfolioView'
 import Metas from 'src/components/inversiones/Metas'
 import Proyeccion from 'src/components/inversiones/Proyeccion'
+import { supabase } from 'src/lib/supabase'
 
 const BG     = '#F7F7F8'
 const T1     = '#111318'
@@ -52,7 +53,7 @@ export default function Inversiones() {
 
   // Auto-fetch TRM diario
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toLocaleDateString('en-CA')
     if (trmFecha === today) return
     setTrmLoading(true)
     const sources = [
@@ -77,89 +78,49 @@ export default function Inversiones() {
     fetchTRM().finally(() => setTrmLoading(false))
   }, [])
 
-  // Auto-fetch precios — corre cuando cambia la lista de tickers
+  // Auto-fetch precios — corre cuando cambia la lista de tickers.
+  // La consulta a Yahoo Finance corre server-side (Edge Function stock-prices)
+  // porque el navegador no puede llamarla directo (CORS), y los proxies
+  // públicos gratuitos que se usaban antes (corsproxy.io, allorigins.win,
+  // stooq legacy) dejaron de funcionar con el tiempo.
   const tickerKey = portfolio.map(p => p.ticker).sort().join(',')
   useEffect(() => {
     const tickers = portfolio.map(p => p.ticker).filter(Boolean)
     if (tickers.length === 0) return
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toLocaleDateString('en-CA')
     const allFresh = preciosFecha === today && tickers.every(t => precios[t] > 0)
     if (allFresh) return
 
     setPreciosLoading(true)
 
-    async function get(url, ms = 7000) {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), ms)
-      try {
-        const r = await fetch(url, { signal: ctrl.signal })
-        clearTimeout(timer)
-        return r
-      } catch (e) {
-        clearTimeout(timer)
-        throw e
-      }
-    }
-
-    async function fetchOneTicker(ticker) {
-      const t = ticker.toUpperCase()
-
-      // 1. corsproxy.io → Yahoo Finance v8 chart (precios en tiempo real)
-      try {
-        const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=1d&range=1d`
-        const r = await get(`https://corsproxy.io/?${encodeURIComponent(yUrl)}`)
-        if (r.ok) {
-          const d = await r.json()
-          const p = d?.chart?.result?.[0]?.meta?.regularMarketPrice
-          if (p > 0) return p
-        }
-      } catch {}
-
-      // 2. Stooq directo (sin CORS para la mayoría de navegadores)
-      try {
-        const r = await get(`https://stooq.com/q/l/?s=${t.toLowerCase()}.us&f=sd2t2ohlcv&h&e=csv`)
-        if (r.ok) {
-          const text = await r.text()
-          const lines = text.trim().split('\n')
-          if (lines.length >= 2) {
-            const cols = lines[1].split(',')
-            const close = parseFloat(cols[6])
-            if (close > 0) return close
-          }
-        }
-      } catch {}
-
-      // 3. allorigins.win → Yahoo Finance v7 quote (proxy alternativo)
-      try {
-        const yUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${t}&fields=regularMarketPrice`
-        const r = await get(`https://api.allorigins.win/raw?url=${encodeURIComponent(yUrl)}`)
-        if (r.ok) {
-          const d = await r.json()
-          const p = d?.quoteResponse?.result?.[0]?.regularMarketPrice
-          if (p > 0) return p
-        }
-      } catch {}
-
-      return null
-    }
-
     async function fetchAll() {
-      const results = await Promise.all(
-        tickers.map(async t => ({ ticker: t, price: await fetchOneTicker(t) }))
-      )
-      const newPrecios = { ...precios }
-      let changed = false
-      results.forEach(({ ticker, price }) => {
-        if (price > 0) { newPrecios[ticker] = price; changed = true }
-      })
-      if (changed) {
-        setPrecios(newPrecios); save('inv_precios', newPrecios)
-        setPreciosFecha(today); save('inv_precios_date', today)
-      }
+      const { data, error } = await supabase.functions.invoke('stock-prices', { body: { tickers } })
+      if (error || !data?.prices) return
+      const newPrecios = { ...precios, ...data.prices }
+      setPrecios(newPrecios); save('inv_precios', newPrecios)
+      setPreciosFecha(today); save('inv_precios_date', today)
     }
 
     fetchAll().finally(() => setPreciosLoading(false))
   }, [tickerKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refresco manual — para cuando el usuario quiere forzar un precio nuevo
+  // a mitad del día sin esperar al cambio de fecha.
+  async function refetchPrecios() {
+    const tickers = portfolio.map(p => p.ticker).filter(Boolean)
+    if (tickers.length === 0) return
+    setPreciosLoading(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('stock-prices', { body: { tickers } })
+      if (error || !data?.prices) return
+      const today = new Date().toLocaleDateString('en-CA')
+      const newPrecios = { ...precios, ...data.prices }
+      setPrecios(newPrecios); save('inv_precios', newPrecios)
+      setPreciosFecha(today); save('inv_precios_date', today)
+    } finally {
+      setPreciosLoading(false)
+    }
+  }
 
   function handleUpdatePrecios(newPrecios, newTrm) {
     setPrecios(newPrecios); save('inv_precios', newPrecios)
@@ -254,6 +215,7 @@ export default function Inversiones() {
             preciosFecha={preciosFecha}
             aportes={aportes}
             onUpdatePrecios={handleUpdatePrecios}
+            onRefetchPrecios={refetchPrecios}
             onDeletePosition={handleDeletePosition}
             onAddAporte={handleAddAporte}
             onDeleteAporte={handleDeleteAporte}

@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Box, Typography, alpha } from '@mui/material'
+import { supabase } from 'src/lib/supabase'
 
 const T1 = '#111318'
 const T2 = '#6B7280'
@@ -23,7 +24,7 @@ function fmtDate(d) {
 }
 
 const EMPTY_FORM = {
-  fecha: new Date().toISOString().split('T')[0],
+  fecha: new Date().toLocaleDateString('en-CA'),
   ticker: '',
   monto: '',
   precioCompra: '',
@@ -34,6 +35,7 @@ export default function PortfolioView({
   preciosLoading, preciosFecha,
   aportes,
   onUpdatePrecios,
+  onRefetchPrecios,
   onDeletePosition,
   onAddAporte, onDeleteAporte,
 }) {
@@ -45,6 +47,34 @@ export default function PortfolioView({
   const [editPrecios, setEditPrecios] = useState(null)
   const [editTrm, setEditTrm]         = useState('')
   const [confirmDel, setConfirmDel]   = useState(null)
+  const [searchResults, setSearchResults] = useState([])
+  const [searching, setSearching]         = useState(false)
+  const [pickedName, setPickedName]       = useState('')
+  const searchTimer = useRef(null)
+
+  // Busca empresas por nombre mientras el usuario escribe (debounce 350ms) —
+  // así no toca adivinarse el ticker exacto (ej: "ecopetrol" -> EC).
+  useEffect(() => {
+    clearTimeout(searchTimer.current)
+    const q = newTickerInput.trim()
+    if (q.length < 2 || q === pickedName) { setSearchResults([]); return }
+    searchTimer.current = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const { data, error } = await supabase.functions.invoke('stock-prices', { body: { search: q } })
+        if (!error && data?.results) setSearchResults(data.results)
+      } finally {
+        setSearching(false)
+      }
+    }, 350)
+    return () => clearTimeout(searchTimer.current)
+  }, [newTickerInput]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function pickResult(hit) {
+    setNewTickerInput(hit.symbol)
+    setPickedName(hit.symbol)
+    setSearchResults([])
+  }
 
   // ── Totales ──────────────────────────────────────────────────
   const totalActualUSD   = portfolio.reduce((s, p) => s + p.shares * (precios[p.ticker] || 0), 0)
@@ -147,11 +177,15 @@ export default function PortfolioView({
           </Box>
         </Box>
 
-        <Box component="button" onClick={openEditPrecios} sx={{
+        <Box component="button" onClick={onRefetchPrecios} disabled={preciosLoading} sx={{
           width: '100%', py: 0.75, borderRadius: '8px', border: `1px solid ${BORDER}`,
-          bgcolor: BG, color: T2, fontWeight: 600, fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
+          bgcolor: BG, color: T2, fontWeight: 600, fontSize: 12, fontFamily: 'inherit',
+          cursor: preciosLoading ? 'default' : 'pointer', opacity: preciosLoading ? 0.6 : 1,
         }}>
-          {preciosLoading ? 'Actualizando precios…' : `Actualizar precios${preciosFecha ? ` · al ${preciosFecha}` : ''}`}
+          {preciosLoading ? 'Actualizando precios…' : `↻ Actualizar precios del mercado${preciosFecha ? ` · al ${preciosFecha}` : ''}`}
+        </Box>
+        <Box onClick={openEditPrecios} sx={{ textAlign: 'center', mt: 0.75, cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
+          <Typography sx={{ fontSize: 11, color: T2, textDecoration: 'underline' }}>Editar precios manualmente</Typography>
         </Box>
       </Box>
 
@@ -322,19 +356,52 @@ export default function PortfolioView({
               </Box>
             </Box>
 
-            {/* Empresa */}
-            <Box sx={{ mb: 1.5 }}>
-              <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>Empresa (ticker)</Typography>
+            {/* Empresa — busca por nombre (ej: "apple", "ecopetrol") o ticker directo */}
+            <Box sx={{ mb: 1.5, position: 'relative' }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>Empresa</Typography>
               <Box component="input"
-                placeholder="QQQ, NVDA, VOO, AAPL…"
+                placeholder="Busca por nombre: Apple, Ecopetrol, VOO…"
                 autoFocus
                 value={newTickerInput}
-                onChange={e => setNewTickerInput(e.target.value.toUpperCase())}
-                sx={{ ...inputSx, letterSpacing: '0.05em', fontWeight: 700 }} />
+                onChange={e => { setNewTickerInput(e.target.value); setPickedName('') }}
+                sx={{ ...inputSx, fontWeight: 700 }} />
+
+              {/* Dropdown de resultados */}
+              {(searching || searchResults.length > 0) && (
+                <Box sx={{
+                  position: 'absolute', left: 0, right: 0, top: '100%', mt: 0.5, zIndex: 20,
+                  bgcolor: '#fff', borderRadius: '10px', border: `1px solid ${BORDER}`,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden', maxHeight: 260, overflowY: 'auto',
+                }}>
+                  {searching && searchResults.length === 0 ? (
+                    <Typography sx={{ px: 1.5, py: 1.25, fontSize: 12, color: T2 }}>Buscando…</Typography>
+                  ) : (
+                    searchResults.map(hit => (
+                      <Box key={hit.symbol} onClick={() => pickResult(hit)} sx={{
+                        display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1,
+                        cursor: 'pointer', borderBottom: `1px solid ${BORDER}`,
+                        '&:last-child': { borderBottom: 'none' }, '&:hover': { bgcolor: BG },
+                      }}>
+                        <Box sx={{
+                          px: 0.75, py: 0.25, borderRadius: '6px', bgcolor: BG, border: `1px solid ${BORDER}`,
+                          fontSize: 11, fontWeight: 800, color: T1, flexShrink: 0,
+                        }}>{hit.symbol}</Box>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: T1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {hit.name}
+                          </Typography>
+                          <Typography sx={{ fontSize: 10.5, color: T2 }}>{hit.exchange} · {hit.type === 'ETF' ? 'ETF' : 'Acción'}</Typography>
+                        </Box>
+                      </Box>
+                    ))
+                  )}
+                </Box>
+              )}
+
               {portfolio.length > 0 && (
                 <Box sx={{ display: 'flex', gap: 0.75, mt: 0.875, flexWrap: 'wrap' }}>
                   {portfolio.map(p => (
-                    <Box key={p.ticker} onClick={() => setNewTickerInput(p.ticker)} sx={{
+                    <Box key={p.ticker} onClick={() => { setNewTickerInput(p.ticker); setPickedName(p.ticker) }} sx={{
                       px: 1.25, py: 0.375, borderRadius: '6px', fontSize: 11, fontWeight: 700,
                       cursor: 'pointer', border: `1px solid ${BORDER}`,
                       bgcolor: newTickerInput === p.ticker ? T1 : BG,

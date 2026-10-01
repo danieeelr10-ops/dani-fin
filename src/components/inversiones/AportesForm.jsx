@@ -8,7 +8,7 @@ const RED    = '#DC2626'
 const BORDER = '#E5E7EB'
 const CARD_SH = '0 1px 3px rgba(0,0,0,0.07)'
 
-const EMPTY = (firstTicker = '') => ({ fecha: new Date().toISOString().split('T')[0], ticker: firstTicker, usd: '', precioCompra: '' })
+const EMPTY = (firstTicker = '') => ({ fecha: new Date().toLocaleDateString('en-CA'), ticker: firstTicker, usd: '', precioCompra: '' })
 
 function fmtDate(d) {
   if (!d) return '—'

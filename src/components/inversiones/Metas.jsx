@@ -11,7 +11,7 @@ function fmtDate(d) {
 
 function daysUntil(d) {
   if (!d) return null
-  const diff = new Date(d) - new Date(new Date().toISOString().split('T')[0])
+  const diff = new Date(d) - new Date(new Date().toLocaleDateString('en-CA'))
   return Math.ceil(diff / (1000 * 60 * 60 * 24))
 }
 
