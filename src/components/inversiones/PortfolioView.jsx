@@ -50,7 +50,32 @@ export default function PortfolioView({
   const [searchResults, setSearchResults] = useState([])
   const [searching, setSearching]         = useState(false)
   const [pickedName, setPickedName]       = useState('')
+  const [fetchingPrice, setFetchingPrice] = useState(false)
+  const [precioEsMercado, setPrecioEsMercado] = useState(false)
   const searchTimer = useRef(null)
+
+  // Trae el precio actual de mercado y lo pone en el campo "Precio de compra"
+  // — el usuario solo lo edita si compró en otro momento a otro precio.
+  async function autofillPrecio(ticker) {
+    if (!ticker) return
+    const cached = precios[ticker]
+    if (cached > 0) {
+      setForm(f => ({ ...f, precioCompra: String(cached) }))
+      setPrecioEsMercado(true)
+      return
+    }
+    setFetchingPrice(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('stock-prices', { body: { tickers: [ticker] } })
+      const p = data?.prices?.[ticker]
+      if (!error && p > 0) {
+        setForm(f => ({ ...f, precioCompra: String(p) }))
+        setPrecioEsMercado(true)
+      }
+    } finally {
+      setFetchingPrice(false)
+    }
+  }
 
   // Busca empresas por nombre mientras el usuario escribe (debounce 350ms) —
   // así no toca adivinarse el ticker exacto (ej: "ecopetrol" -> EC).
@@ -74,6 +99,8 @@ export default function PortfolioView({
     setNewTickerInput(hit.symbol)
     setPickedName(hit.symbol)
     setSearchResults([])
+    setPrecioEsMercado(false)
+    autofillPrecio(hit.symbol)
   }
 
   // ── Totales ──────────────────────────────────────────────────
@@ -401,7 +428,7 @@ export default function PortfolioView({
               {portfolio.length > 0 && (
                 <Box sx={{ display: 'flex', gap: 0.75, mt: 0.875, flexWrap: 'wrap' }}>
                   {portfolio.map(p => (
-                    <Box key={p.ticker} onClick={() => { setNewTickerInput(p.ticker); setPickedName(p.ticker) }} sx={{
+                    <Box key={p.ticker} onClick={() => { setNewTickerInput(p.ticker); setPickedName(p.ticker); setPrecioEsMercado(false); autofillPrecio(p.ticker) }} sx={{
                       px: 1.25, py: 0.375, borderRadius: '6px', fontSize: 11, fontWeight: 700,
                       cursor: 'pointer', border: `1px solid ${BORDER}`,
                       bgcolor: newTickerInput === p.ticker ? T1 : BG,
@@ -454,10 +481,19 @@ export default function PortfolioView({
               <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>
                 Precio de la acción al comprar (USD)
               </Typography>
-              <Box component="input" type="number" placeholder="0.00"
+              <Box component="input" type="number" placeholder={fetchingPrice ? 'Trayendo precio de mercado…' : '0.00'}
+                disabled={fetchingPrice}
                 value={form.precioCompra}
-                onChange={e => setForm(f => ({ ...f, precioCompra: e.target.value }))}
-                sx={inputSx} />
+                onChange={e => { setForm(f => ({ ...f, precioCompra: e.target.value })); setPrecioEsMercado(false) }}
+                sx={{ ...inputSx, opacity: fetchingPrice ? 0.6 : 1 }} />
+              {fetchingPrice && (
+                <Typography sx={{ fontSize: 11, color: T2, mt: 0.5 }}>Buscando el precio actual de {resolvedTicker}…</Typography>
+              )}
+              {!fetchingPrice && precioEsMercado && form.precioCompra && (
+                <Typography sx={{ fontSize: 11, color: GREEN, mt: 0.5 }}>
+                  ✓ Precio de mercado de hoy — cámbialo si compraste en otra fecha
+                </Typography>
+              )}
             </Box>
 
             {/* Preview */}
