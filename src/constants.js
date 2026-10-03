@@ -45,9 +45,7 @@ export const DEFAULT_METAS = {
 
 export const DEFAULT_PRESUPUESTO = {};
 
-export const DEFAULT_INVERSIONES = {
-  portfolio: [], precios: {}, trm: 4500, trmFecha: null, preciosFecha: null, aportes: [], metas: [],
-};
+export const DEFAULT_INVERSIONES = [];
 
 // ── Voz ──────────────────────────────────────────────────
 export const PALABRAS_RUIDO = /\b(pague|pagar|gaste|gasté|compre|compré|pedí|pedi|fui|comi|almorcé|cene|cené|me cobro|me cobró|me cargaron|cargue|cargué|hay que|queda|quedo|quedó|le di|le pague|le pagué|le mande|mandé|puse|guarde|guardé|consigné|saque|saqué|ingreso|ingresó|recibí|recibi|me pagaron|me entraron|entraron|llego|llegó|abonaron|con la|con el|con mi|desde|para|en el|en la|en los|en las|al|a la|a los|por|del|de la|de los|hoy|ayer|esta mañana|esta tarde|el|la|los|las|un|una|que|como|pero|y|o|de|a)\b/gi;

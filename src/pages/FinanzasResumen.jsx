@@ -497,8 +497,8 @@ function InicioInner() {
   const aporteData = useMemo(() => {
     const hoy    = new Date()
     const prefix = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
-    return { ok: (state.inversiones?.aportes || []).some(a => (a.fecha || '').startsWith(prefix)), dia: hoy.getDate() }
-  }, [state.inversiones])
+    return { ok: (ls('inv_aportes') || []).some(a => (a.fecha || '').startsWith(prefix)), dia: hoy.getDate() }
+  }, [])
 
   // Meta
   const metaData = useMemo(() => {

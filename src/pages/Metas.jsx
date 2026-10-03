@@ -17,6 +17,10 @@ const RED     = '#DC2626'
 const AMBER   = '#D97706'
 const BORDER  = '#E5E7EB'
 
+function readLS(key, def) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def } catch { return def }
+}
+
 function MiniBar({ pct, color }) {
   return (
     <Box sx={{ height: 4, bgcolor: '#F3F4F6', borderRadius: 2, overflow: 'hidden' }}>
@@ -95,9 +99,9 @@ export default function Metas() {
   const currentYear = new Date().getFullYear()
   const mesActual   = 'M' + (new Date().getMonth() + 1)
 
-  const invAportes   = state.inversiones?.aportes  || []
-  const invPortfolio = state.inversiones?.portfolio || null
-  const invPrecios   = state.inversiones?.precios  || {}
+  const invAportes   = useMemo(() => readLS('inv_aportes',   []),   [])
+  const invPortfolio = useMemo(() => readLS('inv_portfolio', null), [])
+  const invPrecios   = useMemo(() => readLS('inv_precios',   {}),   [])
 
   const totalInvUSD = useMemo(() => invAportes.reduce((s, a) => s + (a.usd || 0), 0), [invAportes])
 
@@ -518,7 +522,7 @@ export default function Metas() {
                 <Typography sx={{ fontSize: 11, color: T2, mb: 1.25 }}>
                   Aportes acumulados: <b style={{ color: T1 }}>${totalInvUSD.toFixed(2)} USD</b>
                 </Typography>
-                <Box component="button" onClick={() => navigate('/finanzas/inversiones')}
+                <Box component="button" onClick={() => navigate('/inversiones')}
                   sx={{ width: '100%', py: 0.875, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: '#F3F4F6', color: T1, fontWeight: 600, fontSize: 12, fontFamily: 'inherit', cursor: 'pointer' }}>
                   Ver detalle en Inversiones →
                 </Box>
@@ -563,7 +567,7 @@ export default function Metas() {
               <Typography sx={{ fontSize: 12, color: T2, mb: 2.5 }}>
                 Registra tu primera inversión en la sección Inversiones
               </Typography>
-              <Box component="button" onClick={() => navigate('/finanzas/inversiones')}
+              <Box component="button" onClick={() => navigate('/inversiones')}
                 sx={{ px: 3, py: 1, borderRadius: '8px', border: `1px solid ${alpha(GREEN, 0.4)}`, bgcolor: alpha(GREEN, 0.08), color: GREEN, fontWeight: 700, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>
                 Ir a Inversiones →
               </Box>

@@ -54,9 +54,7 @@ function mergeWithDefaults(p) {
     sheetId:                  p.sheetId                  || '',
     scriptUrl:                p.scriptUrl                || '',
     metas:                    p.metas                    || JSON.parse(JSON.stringify(DEFAULT_METAS)),
-    inversiones:              (p.inversiones && typeof p.inversiones === 'object' && !Array.isArray(p.inversiones))
-                                 ? { ...JSON.parse(JSON.stringify(DEFAULT_INVERSIONES)), ...p.inversiones }
-                                 : JSON.parse(JSON.stringify(DEFAULT_INVERSIONES)),
+    inversiones:              p.inversiones?.length      ? p.inversiones : JSON.parse(JSON.stringify(DEFAULT_INVERSIONES)),
     presupuestos,
     presupuestosDetalle,
     categoriasEgresoFijo:     p.categoriasEgresoFijo     || [...CATEGORIAS_EGRESO_FIJO],
@@ -557,47 +555,6 @@ function addTarjetaNu(s) {
   return { state: { ...s, tarjetas, transacciones: txs }, changed: true };
 }
 
-// Migración: el portafolio de Inversiones vivía solo en localStorage
-// (inv_portfolio, inv_aportes, inv_precios, inv_trm, inv_metas, etc.) — nunca
-// se sincronizaba a Supabase, así que cada dispositivo/navegador tenía su
-// propia copia y en un dispositivo nuevo todo aparecía en $0 aunque en otro
-// ya hubiera datos. Sube lo que haya en este navegador a state.inversiones
-// (que sí sincroniza) una sola vez.
-function migrarInversionesLocalStorage(s) {
-  const FLAG = 'migrar_inversiones_localstorage_v1';
-  try { if (localStorage.getItem(FLAG)) return { state: s, changed: false }; } catch(e) {}
-  try { localStorage.setItem(FLAG, '1'); } catch(e) {}
-
-  function readLS(key, def) {
-    try { const v = localStorage.getItem(key); return v != null ? JSON.parse(v) : def } catch { return def }
-  }
-
-  const portfolio     = readLS('inv_portfolio', []);
-  const aportes       = readLS('inv_aportes', []);
-  const precios       = readLS('inv_precios', {});
-  const trm           = readLS('inv_trm', null);
-  const trmFecha       = readLS('inv_trm_date', null);
-  const preciosFecha   = readLS('inv_precios_date', null);
-  const metasInv       = readLS('inv_metas', []);
-
-  const hayDatosLocales = portfolio.length > 0 || aportes.length > 0 || metasInv.length > 0;
-  const yaTieneEnNube    = (s.inversiones?.portfolio?.length > 0) || (s.inversiones?.aportes?.length > 0);
-  if (!hayDatosLocales || yaTieneEnNube) return { state: s, changed: false };
-
-  return {
-    state: {
-      ...s,
-      inversiones: {
-        ...s.inversiones,
-        portfolio, aportes, precios, metas: metasInv,
-        trm: trm || s.inversiones?.trm || 4500,
-        trmFecha, preciosFecha,
-      },
-    },
-    changed: true,
-  };
-}
-
 // Seed: agrega cierres mensuales de prueba si no hay ninguno (solo en local/dev)
 function seedCierresPrueba(s) {
   const FLAG = 'seed_cierres_prueba_v1';
@@ -636,26 +593,21 @@ export function FinanzasProvider({ children }) {
       const { state: s1, changed: c1 } = fixIngresosFijos(prev);
       const { state: s2, changed: c2 } = migrateMercadoOrphans(s1);
       const { state: s2b, changed: c2b } = addTarjetaNu(s2);
-      const { state: s2e, changed: c2e } = migrarInversionesLocalStorage(s2b);
 
       // Seeds solo en desarrollo local Y solo si ya hay transacciones previas (cuenta de Dani)
-      const esUsuarioExistente = (s2e.transacciones || []).length > 0;
-      const { state: s3, changed: c3 } = IS_DEV && esUsuarioExistente ? seedNuAbril(s2e)       : { state: s2e, changed: false };
+      const esUsuarioExistente = (s2b.transacciones || []).length > 0;
+      const { state: s3, changed: c3 } = IS_DEV && esUsuarioExistente ? seedNuAbril(s2b)       : { state: s2b, changed: false };
       const { state: s4, changed: c4 } = IS_DEV && esUsuarioExistente ? seedNuMarzo(s3)        : { state: s3,  changed: false };
       const { state: s5, changed: c5 } = IS_DEV && esUsuarioExistente ? seedLocal2026(s4)      : { state: s4,  changed: false };
       const { state: s6, changed: c6 } = IS_DEV && esUsuarioExistente ? seedCierresPrueba(s5)  : { state: s5,  changed: false };
 
-      if (!c1 && !c2 && !c2b && !c2e && !c3 && !c4 && !c5 && !c6) return prev;
-      // Si migrarInversionesLocalStorage subió datos, es una corrección real de
-      // datos (no solo housekeeping): actualiza lastModified para que gane la
-      // comparación de sync remoto y se propague a Supabase / otros dispositivos.
-      const finalState = c2e ? { ...s6, lastModified: Date.now() } : s6;
-      persistLocal(finalState);
-      // NO escribir a Supabase aquí (salvo el caso de arriba): el sync remoto
-      // (useEffect siguiente) compara timestamps y decide qué fuente es la más
-      // reciente. Si las migraciones empujaran a Supabase antes de que lleguen
-      // los datos remotos, sobreescriben la data real del usuario en otros dispositivos.
-      return finalState;
+      if (!c1 && !c2 && !c2b && !c3 && !c4 && !c5 && !c6) return prev;
+      persistLocal(s6);
+      // NO escribir a Supabase aquí: el sync remoto (useEffect siguiente) compara
+      // timestamps y decide qué fuente es la más reciente. Si las migraciones
+      // empujaran a Supabase antes de que lleguen los datos remotos, sobreescriben
+      // la data real del usuario en otros dispositivos.
+      return s6;
     });
   }, []);
 
@@ -1248,9 +1200,8 @@ export function FinanzasProvider({ children }) {
         'add_tarjeta_nu_v1', 'fix_ingresos_fijos_v1_done', 'seed_cierres_prueba_v1',
       ];
       flags.forEach(f => localStorage.setItem(f, '1'));
-      localStorage.setItem('migrar_inversiones_localstorage_v1', '1');
       // Limpiar datos de inversiones e hábitos que viven en localStorage propio
-      ['inv_aportes', 'inv_portfolio', 'inv_precios', 'inv_trm', 'inv_trm_date', 'inv_precios_date', 'inv_metas', 'hab_habitos', 'hab_done'].forEach(k => localStorage.removeItem(k));
+      ['inv_aportes', 'inv_portfolio', 'inv_precios', 'hab_habitos', 'hab_done'].forEach(k => localStorage.removeItem(k));
     } catch {}
 
     update(prev => {
@@ -1261,7 +1212,7 @@ export function FinanzasProvider({ children }) {
         presupuestos:        { ...EMPTY_PRESUPUESTOS },
         presupuestosDetalle: { ...EMPTY_DETALLE },
         metas:               JSON.parse(JSON.stringify(DEFAULT_METAS)),
-        inversiones:         JSON.parse(JSON.stringify(DEFAULT_INVERSIONES)),
+        inversiones:         [],
         habitos:             [],
         habitosChecks:       {},
         habitosFrozen:       {},
