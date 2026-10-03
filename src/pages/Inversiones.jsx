@@ -33,13 +33,8 @@ export default function Inversiones() {
   const aportes       = inv.aportes      || []
   const metas         = inv.metas        || []
 
-  // Forma funcional: siempre fusiona contra el estado más reciente, no contra
-  // el "inv" capturado en el render donde se creó este patch(). Sin esto, el
-  // auto-fetch de TRM o de precios (useEffect con deps fijas) podía resolver
-  // después de que la migración ya hubiera poblado el portafolio y pisarlo
-  // de vuelta a vacío con su propia copia vieja de "inv".
   function patch(partial) {
-    saveInversiones(prevInv => ({ ...(prevInv || {}), ...partial }))
+    saveInversiones({ ...inv, ...partial })
   }
 
   const totalUSD = portfolio.reduce((s, p) => s + p.shares * (precios[p.ticker] || 0), 0)
