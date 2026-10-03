@@ -101,6 +101,19 @@ function persistBackup(state) {
   } catch {}
 }
 
+// Evita que un estado casi vacío (localStorage recién borrado, una fila de
+// Supabase corrupta, un dispositivo que nunca llegó a tener datos) se trague
+// datos reales — ya sea subiéndolo a la nube o bajándolo y pisando lo local.
+// "actual" es el lado que ya tenía datos confirmados; "candidato" es lo que
+// se está por adoptar. Si el candidato tiene muchas menos transacciones,
+// se trata como señal de pérdida de datos y se descarta el cambio, aunque
+// su lastModified sea más reciente — un vacío "más nuevo" no es más confiable.
+function pareceSerPerdidaDeDatos(actual, candidato) {
+  const actualCount    = actual?.transacciones?.length || 0;
+  const candidatoCount = candidato?.transacciones?.length || 0;
+  return actualCount >= 5 && candidatoCount < actualCount * 0.2;
+}
+
 const IS_DEV = import.meta.env.DEV;
 
 // Canal broadcast por usuario — señal de "datos actualizados"
@@ -615,6 +628,17 @@ export function FinanzasProvider({ children }) {
   useEffect(() => {
     if (!user) return;
     if (IS_DEV) return; // Dev: usar solo localStorage, nunca tocar Supabase
+
+    // Respaldo del lado del servidor, una vez por sesión — independiente de
+    // que el almacenamiento del navegador sobreviva o no. "Fire and forget":
+    // no bloquea nada, no importa si falla (ej. sin internet un instante).
+    supabase.auth.getSession().then(({ data }) => {
+      const token = data?.session?.access_token;
+      if (token) supabase.functions.invoke('snapshot-backup', {
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+    }).catch(() => {});
+
     setSyncing(true);
     supabase
       .from('user_data')
@@ -632,7 +656,25 @@ export function FinanzasProvider({ children }) {
           const localCount  = (local.transacciones?.length  || 0) + Object.values(local.presupuestosDetalle  || {}).reduce((s, a) => s + (a?.length || 0), 0);
           const useRemote = remoteTs > localTs || (remoteTs === localTs && remoteCount >= localCount);
           if (useRemote) {
-            persistBackup(remote); // guardar backup antes de sobrescribir local
+            if (pareceSerPerdidaDeDatos(local, remote)) {
+              // La nube parece vaciarse de golpe frente a lo que ya había local
+              // (ej. una fila corrupta, o un dispositivo que subió un estado recién
+              // borrado) — no la adoptamos ciegamente: nos quedamos con lo local,
+              // que es lo único verificado, y lo volvemos a subir.
+              console.warn('[sync] La nube parece haber perdido datos frente a lo local — se conserva lo local.');
+              persistBackup(local);
+              persistRemote(local, user.id);
+            } else {
+              persistBackup(remote); // guardar backup antes de sobrescribir local
+              setState(remote);
+              persistLocal(remote);
+            }
+          } else if (pareceSerPerdidaDeDatos(remote, local)) {
+            // Lo local parece vaciarse de golpe frente a lo que ya había en la
+            // nube (ej. se borró el almacenamiento del navegador) — jamás subir
+            // ese vacío por encima de datos reales. Se adopta la nube en su lugar.
+            console.warn('[sync] Lo local parece haber perdido datos frente a la nube — se conserva la nube.');
+            persistBackup(remote);
             setState(remote);
             persistLocal(remote);
           } else {
@@ -661,6 +703,10 @@ export function FinanzasProvider({ children }) {
         const remote = mergeWithDefaults(data.data);
         const local  = loadFromStorage();
         if ((remote.lastModified || 0) > (local.lastModified || 0)) {
+          if (pareceSerPerdidaDeDatos(local, remote)) {
+            console.warn('[sync] fetchAndSync: la nube parece haber perdido datos — se ignora.');
+            return;
+          }
           setState(remote);
           persistLocal(remote);
         }
