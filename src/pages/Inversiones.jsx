@@ -4,21 +4,11 @@ import PortfolioView from 'src/components/inversiones/PortfolioView'
 import Metas from 'src/components/inversiones/Metas'
 import Proyeccion from 'src/components/inversiones/Proyeccion'
 import { supabase } from 'src/lib/supabase'
+import { useFinanzas } from 'src/context/FinanzasContext'
 
 const BG     = '#F7F7F8'
 const T1     = '#111318'
 const T2     = '#6B7280'
-
-function load(key, def) {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def } catch { return def }
-}
-function save(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)) } catch {}
-}
-
-const DEFAULT_PORTFOLIO = []
-const DEFAULT_PRECIOS   = {}
-const DEFAULT_TRM = 4500
 
 const TABS = [
   { id: 'portafolio', label: 'Portafolio' },
@@ -27,17 +17,25 @@ const TABS = [
 ]
 
 export default function Inversiones() {
+  const { state, saveInversiones } = useFinanzas()
   const [tab, setTab] = useState('portafolio')
-
-  const [portfolio, setPortfolio] = useState(() => load('inv_portfolio', DEFAULT_PORTFOLIO))
-  const [precios,   setPrecios]   = useState(() => load('inv_precios',   DEFAULT_PRECIOS))
-  const [trm,       setTrm]       = useState(() => load('inv_trm',       DEFAULT_TRM))
-  const [trmFecha,  setTrmFecha]  = useState(() => load('inv_trm_date',  null))
   const [trmLoading,     setTrmLoading]     = useState(false)
-  const [preciosFecha,   setPreciosFecha]   = useState(() => load('inv_precios_date', null))
   const [preciosLoading, setPreciosLoading] = useState(false)
-  const [aportes,   setAportes]   = useState(() => load('inv_aportes',   []))
-  const [metas,     setMetas]     = useState(() => load('inv_metas',     []))
+
+  // state.inversiones sincroniza vía Supabase, así que el portafolio es el
+  // mismo en todos los dispositivos — antes esto vivía solo en localStorage.
+  const inv = state.inversiones || {}
+  const portfolio    = inv.portfolio    || []
+  const precios      = inv.precios      || {}
+  const trm          = inv.trm          || 4500
+  const trmFecha      = inv.trmFecha     || null
+  const preciosFecha  = inv.preciosFecha || null
+  const aportes       = inv.aportes      || []
+  const metas         = inv.metas        || []
+
+  function patch(partial) {
+    saveInversiones({ ...inv, ...partial })
+  }
 
   const totalUSD = portfolio.reduce((s, p) => s + p.shares * (precios[p.ticker] || 0), 0)
 
@@ -47,9 +45,8 @@ export default function Inversiones() {
     if (needsFallback.length === 0) return
     const newPrecios = { ...precios }
     needsFallback.forEach(p => { newPrecios[p.ticker] = p.avgPrice })
-    setPrecios(newPrecios); save('inv_precios', newPrecios)
-    setPreciosFecha(null); save('inv_precios_date', null)
-  }, [portfolio])
+    patch({ precios: newPrecios, preciosFecha: null })
+  }, [portfolio]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-fetch TRM diario
   useEffect(() => {
@@ -68,15 +65,14 @@ export default function Inversiones() {
           const data = await r.json()
           const rate = src.parse(data)
           if (rate && rate > 1000) {
-            setTrm(Math.round(rate)); setTrmFecha(today)
-            save('inv_trm', Math.round(rate)); save('inv_trm_date', today)
+            patch({ trm: Math.round(rate), trmFecha: today })
             return
           }
         } catch {}
       }
     }
     fetchTRM().finally(() => setTrmLoading(false))
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-fetch precios — corre cuando cambia la lista de tickers.
   // La consulta a Yahoo Finance corre server-side (Edge Function stock-prices)
@@ -96,9 +92,7 @@ export default function Inversiones() {
     async function fetchAll() {
       const { data, error } = await supabase.functions.invoke('stock-prices', { body: { tickers } })
       if (error || !data?.prices) return
-      const newPrecios = { ...precios, ...data.prices }
-      setPrecios(newPrecios); save('inv_precios', newPrecios)
-      setPreciosFecha(today); save('inv_precios_date', today)
+      patch({ precios: { ...precios, ...data.prices }, preciosFecha: today })
     }
 
     fetchAll().finally(() => setPreciosLoading(false))
@@ -114,44 +108,39 @@ export default function Inversiones() {
       const { data, error } = await supabase.functions.invoke('stock-prices', { body: { tickers } })
       if (error || !data?.prices) return
       const today = new Date().toLocaleDateString('en-CA')
-      const newPrecios = { ...precios, ...data.prices }
-      setPrecios(newPrecios); save('inv_precios', newPrecios)
-      setPreciosFecha(today); save('inv_precios_date', today)
+      patch({ precios: { ...precios, ...data.prices }, preciosFecha: today })
     } finally {
       setPreciosLoading(false)
     }
   }
 
   function handleUpdatePrecios(newPrecios, newTrm) {
-    setPrecios(newPrecios); save('inv_precios', newPrecios)
-    setTrm(newTrm); save('inv_trm', newTrm)
+    patch({ precios: newPrecios, trm: newTrm })
   }
 
   function handleDeletePosition(ticker) {
-    const next = portfolio.filter(p => p.ticker !== ticker)
-    setPortfolio(next); save('inv_portfolio', next)
+    patch({ portfolio: portfolio.filter(p => p.ticker !== ticker) })
   }
 
   function handleAddAporte(aporte) {
-    const next = [aporte, ...aportes]
-    setAportes(next); save('inv_aportes', next)
+    const nextAportes = [aporte, ...aportes]
+    const updates = { aportes: nextAportes }
 
     // Actualizar precio si no existe
+    let nextPrecios = precios
     if (!precios[aporte.ticker] || precios[aporte.ticker] === 0) {
-      const newPrecios = { ...precios, [aporte.ticker]: aporte.precioCompra }
-      setPrecios(newPrecios); save('inv_precios', newPrecios)
-      setPreciosFecha(null); save('inv_precios_date', null)
+      nextPrecios = { ...precios, [aporte.ticker]: aporte.precioCompra }
+      updates.precios = nextPrecios
+      updates.preciosFecha = null
     }
 
     const exists = portfolio.some(p => p.ticker === aporte.ticker)
     if (!exists) {
       // Ticker nuevo — crear posición
-      const newEntry = { ticker: aporte.ticker, shares: aporte.shares, avgPrice: aporte.precioCompra }
-      const nextP = [...portfolio, newEntry]
-      setPortfolio(nextP); save('inv_portfolio', nextP)
+      updates.portfolio = [...portfolio, { ticker: aporte.ticker, shares: aporte.shares, avgPrice: aporte.precioCompra }]
     } else {
       // Ticker existente — acumular acciones y recalcular precio promedio
-      const nextP = portfolio.map(p => {
+      updates.portfolio = portfolio.map(p => {
         if (p.ticker !== aporte.ticker) return p
         const totalShares = p.shares + aporte.shares
         const avgPrice = totalShares > 0
@@ -159,18 +148,18 @@ export default function Inversiones() {
           : 0
         return { ...p, shares: totalShares, avgPrice }
       })
-      setPortfolio(nextP); save('inv_portfolio', nextP)
     }
+
+    patch(updates)
   }
 
   function handleDeleteAporte(id) {
-    const next = aportes.filter(a => a.id !== id)
-    setAportes(next); save('inv_aportes', next)
+    patch({ aportes: aportes.filter(a => a.id !== id) })
   }
 
-  function handleAddMeta(meta)         { const n = [...metas, meta];                   setMetas(n); save('inv_metas', n) }
-  function handleEditMeta(id, updates) { const n = metas.map(m => m.id === id ? { ...m, ...updates } : m); setMetas(n); save('inv_metas', n) }
-  function handleDeleteMeta(id)        { const n = metas.filter(m => m.id !== id);     setMetas(n); save('inv_metas', n) }
+  function handleAddMeta(meta)         { patch({ metas: [...metas, meta] }) }
+  function handleEditMeta(id, updates) { patch({ metas: metas.map(m => m.id === id ? { ...m, ...updates } : m) }) }
+  function handleDeleteMeta(id)        { patch({ metas: metas.filter(m => m.id !== id) }) }
 
   return (
     <Box sx={{ bgcolor: BG, minHeight: '100%' }}>
