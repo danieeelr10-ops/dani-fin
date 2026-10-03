@@ -4,11 +4,25 @@ import { Box, Typography } from '@mui/material'
 const GREEN  = '#00A76F'
 const BORDER = '#E5E7EB'
 
+// Revisa si hay una versión nueva cada 60s mientras la app está abierta —
+// el registro del service worker por sí solo solo chequea una vez al cargar,
+// así que en móvil (donde la PWA se queda abierta mucho tiempo sin recargar)
+// se podía quedar pegada en una versión vieja sin avisar.
+const CHECK_INTERVAL_MS = 60 * 1000
+
 export default function UpdateBanner() {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
-  } = useRegisterSW()
+  } = useRegisterSW({
+    onRegisteredSW(_url, registration) {
+      if (!registration) return
+      setInterval(() => registration.update(), CHECK_INTERVAL_MS)
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') registration.update()
+      })
+    },
+  })
 
   if (!needRefresh) return null
 
