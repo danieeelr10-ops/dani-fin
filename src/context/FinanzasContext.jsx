@@ -107,13 +107,29 @@ function persistBackup(state) {
 // Supabase corrupta, un dispositivo que nunca llegó a tener datos) se trague
 // datos reales — ya sea subiéndolo a la nube o bajándolo y pisando lo local.
 // "actual" es el lado que ya tenía datos confirmados; "candidato" es lo que
-// se está por adoptar. Si el candidato tiene muchas menos transacciones,
-// se trata como señal de pérdida de datos y se descarta el cambio, aunque
-// su lastModified sea más reciente — un vacío "más nuevo" no es más confiable.
+// se está por adoptar. Si el candidato tiene muchas menos transacciones (o
+// perdió por completo el portafolio/aportes de inversiones mientras el otro
+// lado sí los tenía), se trata como señal de pérdida de datos y se descarta
+// el cambio, aunque su lastModified sea más reciente — un vacío "más nuevo"
+// no es más confiable. Chequear inversiones aparte es necesario porque es un
+// campo que puede estar vacío por diseño en un dispositivo (nunca tuvo
+// portafolio) sin que eso implique que las transacciones se perdieron — así
+// que un conteo de transacciones intacto no basta para descartar que SOLO
+// el portafolio se perdió en la sincronización.
+function contarInversiones(inv) {
+  return (inv?.portfolio?.length || 0) + (inv?.aportes?.length || 0);
+}
+
 function pareceSerPerdidaDeDatos(actual, candidato) {
   const actualCount    = actual?.transacciones?.length || 0;
   const candidatoCount = candidato?.transacciones?.length || 0;
-  return actualCount >= 5 && candidatoCount < actualCount * 0.2;
+  if (actualCount >= 5 && candidatoCount < actualCount * 0.2) return true;
+
+  const actualInv    = contarInversiones(actual?.inversiones);
+  const candidatoInv = contarInversiones(candidato?.inversiones);
+  if (actualInv >= 1 && candidatoInv === 0) return true;
+
+  return false;
 }
 
 const IS_DEV = import.meta.env.DEV;
