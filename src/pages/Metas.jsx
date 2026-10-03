@@ -17,10 +17,6 @@ const RED     = '#DC2626'
 const AMBER   = '#D97706'
 const BORDER  = '#E5E7EB'
 
-function readLS(key, def) {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def } catch { return def }
-}
-
 function MiniBar({ pct, color }) {
   return (
     <Box sx={{ height: 4, bgcolor: '#F3F4F6', borderRadius: 2, overflow: 'hidden' }}>
@@ -99,9 +95,9 @@ export default function Metas() {
   const currentYear = new Date().getFullYear()
   const mesActual   = 'M' + (new Date().getMonth() + 1)
 
-  const invAportes   = useMemo(() => readLS('inv_aportes',   []),   [])
-  const invPortfolio = useMemo(() => readLS('inv_portfolio', null), [])
-  const invPrecios   = useMemo(() => readLS('inv_precios',   {}),   [])
+  const invAportes   = state.inversiones?.aportes   || []
+  const invPortfolio = state.inversiones?.portfolio || null
+  const invPrecios   = state.inversiones?.precios   || {}
 
   const totalInvUSD = useMemo(() => invAportes.reduce((s, a) => s + (a.usd || 0), 0), [invAportes])
 
