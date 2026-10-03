@@ -564,7 +564,7 @@ function addTarjetaNu(s) {
 // ya hubiera datos. Sube lo que haya en este navegador a state.inversiones
 // (que sí sincroniza) una sola vez.
 function migrarInversionesLocalStorage(s) {
-  const FLAG = 'migrar_inversiones_localstorage_v1';
+  const FLAG = 'migrar_inversiones_localstorage_v2';
   try { if (localStorage.getItem(FLAG)) return { state: s, changed: false }; } catch(e) {}
   try { localStorage.setItem(FLAG, '1'); } catch(e) {}
 
@@ -835,7 +835,14 @@ export function FinanzasProvider({ children }) {
     transacciones: [...transacciones, ...prev.transacciones],
   }));
   const updateMeta        = (mes, meta) => update(prev => ({ ...prev, metas: { ...prev.metas, [mes]: meta } }));
-  const saveInversiones   = (inv)  => update(prev => ({ ...prev, inversiones: inv }));
+  // Acepta un objeto o una función (prevInversiones => next) — la función
+  // siempre recibe el estado más reciente (vía update/setState), evitando que
+  // un patch() con closure vieja (ej. el auto-fetch de TRM resolviendo después
+  // de que la migración ya pobló el portafolio) pise datos recién escritos.
+  const saveInversiones = (inv) => update(prev => ({
+    ...prev,
+    inversiones: typeof inv === 'function' ? inv(prev.inversiones) : inv,
+  }));
   const saveSheetConfig   = (sheetId, scriptUrl) => update(prev => ({ ...prev, sheetId, scriptUrl }));
 
   const saveConfig = ({ categoriasEgresoFijo, categoriasEgresoVariable, categoriasIngreso, cuentas }) =>
@@ -1248,7 +1255,7 @@ export function FinanzasProvider({ children }) {
         'add_tarjeta_nu_v1', 'fix_ingresos_fijos_v1_done', 'seed_cierres_prueba_v1',
       ];
       flags.forEach(f => localStorage.setItem(f, '1'));
-      localStorage.setItem('migrar_inversiones_localstorage_v1', '1');
+      localStorage.setItem('migrar_inversiones_localstorage_v2', '1');
       // Limpiar datos de inversiones e hábitos que viven en localStorage propio
       ['inv_aportes', 'inv_portfolio', 'inv_precios', 'inv_trm', 'inv_trm_date', 'inv_precios_date', 'inv_metas', 'hab_habitos', 'hab_done'].forEach(k => localStorage.removeItem(k));
     } catch {}
