@@ -593,7 +593,11 @@ function addTarjetaNu(s) {
 // ya hubiera datos. Sube lo que haya en este navegador a state.inversiones
 // (que sí sincroniza) una sola vez.
 function migrarInversionesLocalStorage(s) {
-  const FLAG = 'migrar_inversiones_localstorage_v2';
+  // v3: la v2 corrió, pero el guard de sincronización solo protegía
+  // transacciones — otro dispositivo sincronizó con inversiones vacías justo
+  // después y pisó lo recién migrado. Ahora que pareceSerPerdidaDeDatos
+  // también protege inversiones, se bumpea la versión para forzar un reintento.
+  const FLAG = 'migrar_inversiones_localstorage_v3';
   try { if (localStorage.getItem(FLAG)) return { state: s, changed: false }; } catch(e) {}
   try { localStorage.setItem(FLAG, '1'); } catch(e) {}
 
@@ -1318,7 +1322,7 @@ export function FinanzasProvider({ children }) {
         'add_tarjeta_nu_v1', 'fix_ingresos_fijos_v1_done', 'seed_cierres_prueba_v1',
       ];
       flags.forEach(f => localStorage.setItem(f, '1'));
-      localStorage.setItem('migrar_inversiones_localstorage_v2', '1');
+      localStorage.setItem('migrar_inversiones_localstorage_v3', '1');
       // Limpiar datos de inversiones e hábitos que viven en localStorage propio
       ['inv_aportes', 'inv_portfolio', 'inv_precios', 'inv_trm', 'inv_trm_date', 'inv_precios_date', 'inv_metas', 'hab_habitos', 'hab_done'].forEach(k => localStorage.removeItem(k));
     } catch {}
