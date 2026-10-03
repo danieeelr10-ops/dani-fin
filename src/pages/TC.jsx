@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Box, Typography, alpha, Collapse } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import { useFinanzas } from 'src/context/FinanzasContext';
 import { formatMoney, formatFechaShort } from 'src/utils/format';
 import { MESES, MES_NAMES, CAT_ICONS } from 'src/constants';
@@ -21,6 +22,19 @@ function daysUntilNext(dia) {
   if (thisMonth >= today) return Math.ceil((thisMonth - today) / 86400000);
   const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, dia);
   return Math.ceil((nextMonth - today) / 86400000);
+}
+
+function getCicloInfo(mes, tarjeta) {
+  if (!tarjeta.fechaCorte) return null;
+  const mesIdx = MESES.indexOf(mes);
+  if (mesIdx < 0) return null;
+  const prevIdx = mesIdx === 0 ? 11 : mesIdx - 1;
+  const nextIdx = mesIdx === 11 ? 0 : mesIdx + 1;
+  return {
+    inicio:    `${tarjeta.fechaCorte + 1} ${MES_NAMES[prevIdx].slice(0, 3)}`,
+    fin:       `${tarjeta.fechaCorte} ${MES_NAMES[mesIdx].slice(0, 3)}`,
+    pagoLabel: `${tarjeta.diaPago} ${MES_NAMES[nextIdx].slice(0, 3)}`,
+  };
 }
 
 // ── Status badge tarjeta ────────────────────────────────────
@@ -45,7 +59,7 @@ function ExtractoTarjeta({ tarjeta, cargos, pagos, mes, onAdd, onDeleteTx, onDel
   const [showPago, setShowPago]   = useState(false);
   const [monto, setMonto]         = useState('');
   const [cuenta, setCuenta]       = useState(cuentas[0] || 'Nequi');
-  const [fecha, setFecha]         = useState(new Date().toISOString().split('T')[0]);
+  const [fecha, setFecha]         = useState(new Date().toLocaleDateString('en-CA'));
 
   const totalCargos = cargos.reduce((s, t) => s + Math.abs(t.total), 0);
   const totalPagado = pagos.reduce((s, t) => s + Math.abs(t.total), 0);
@@ -54,6 +68,7 @@ function ExtractoTarjeta({ tarjeta, cargos, pagos, mes, onAdd, onDeleteTx, onDel
   const dias        = daysUntilNext(tarjeta.diaPago);
   const urgente     = dias <= 5 && !pagada;
   const sorted      = [...cargos].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  const ciclo       = getCicloInfo(mes, tarjeta);
 
   function confirmarPago() {
     const val = parseInt(monto.replace(/\D/g, ''), 10);
@@ -79,9 +94,20 @@ function ExtractoTarjeta({ tarjeta, cargos, pagos, mes, onAdd, onDeleteTx, onDel
               <Typography sx={{ fontSize: 15, fontWeight: 700, color: T1 }}>{tarjeta.nombre}</Typography>
               <EstadoBadge totalCargos={totalCargos} totalPagado={totalPagado} />
             </Box>
-            <Typography sx={{ fontSize: 11, color: urgente ? RED : T2, fontWeight: urgente ? 600 : 400 }}>
-              Pago el día {tarjeta.diaPago} · {dias === 0 ? '¡hoy!' : `${dias}d`}
-            </Typography>
+            {ciclo ? (
+              <>
+                <Typography sx={{ fontSize: 11, color: T2 }}>
+                  Extracto: {ciclo.inicio} → {ciclo.fin}
+                </Typography>
+                <Typography sx={{ fontSize: 11, color: urgente ? RED : T2, fontWeight: urgente ? 600 : 400 }}>
+                  Pagar antes del {ciclo.pagoLabel} · {dias === 0 ? '¡hoy!' : `${dias}d`}
+                </Typography>
+              </>
+            ) : (
+              <Typography sx={{ fontSize: 11, color: urgente ? RED : T2, fontWeight: urgente ? 600 : 400 }}>
+                Pago el día {tarjeta.diaPago} · {dias === 0 ? '¡hoy!' : `${dias}d`}
+              </Typography>
+            )}
           </Box>
           <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
             <Typography sx={{ fontSize: 16, fontWeight: 800, color: saldo > 0 ? RED : T2 }}>
@@ -246,22 +272,15 @@ function ExtractoTarjeta({ tarjeta, cargos, pagos, mes, onAdd, onDeleteTx, onDel
 }
 
 // ── Config tarjetas ─────────────────────────────────────────
-function TarjetasConfig({ tarjetas, cuentas, onSave }) {
-  const [nombre, setNombre] = useState('');
-  const [dia, setDia]       = useState('');
+function TarjetasConfig({ tarjetas }) {
+  const navigate = useNavigate();
 
-  function add() {
-    if (!nombre.trim() || !dia) return;
-    onSave([...tarjetas, { id: Date.now(), nombre: nombre.trim(), diaPago: parseInt(dia) }]);
-    setNombre(''); setDia('');
-  }
-
-  if (tarjetas.length === 0 && !nombre) return (
+  if (tarjetas.length === 0) return (
     <Box sx={{ bgcolor: CARD, borderRadius: '14px', boxShadow: CARD_SH, border: `1.5px dashed ${BORDER}`, p: 2.5, mb: 2.5, textAlign: 'center' }}>
       <Typography sx={{ fontSize: 14, fontWeight: 600, color: T1, mb: 0.5 }}>No tienes tarjetas configuradas</Typography>
-      <Typography sx={{ fontSize: 12, color: T2, mb: 1.75 }}>Agrega tus tarjetas para registrar y hacer seguimiento de cargos</Typography>
-      <Box component="button" onClick={() => setNombre(' ')} sx={{ px: 2.5, py: 0.875, borderRadius: '10px', border: 'none', bgcolor: T1, color: '#fff', fontWeight: 700, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>
-        + Agregar tarjeta
+      <Typography sx={{ fontSize: 12, color: T2, mb: 1.75 }}>Para agregar tarjetas ve a Configuración</Typography>
+      <Box component="button" onClick={() => navigate('/config')} sx={{ px: 2.5, py: 0.875, borderRadius: '10px', border: 'none', bgcolor: T1, color: '#fff', fontWeight: 700, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>
+        Ir a Configuración
       </Box>
     </Box>
   );
@@ -271,7 +290,10 @@ function TarjetasConfig({ tarjetas, cuentas, onSave }) {
       <Box sx={{ px: 2.5, py: 1.5, borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box>
           <Typography sx={{ fontSize: 14, fontWeight: 700, color: T1 }}>Mis tarjetas</Typography>
-          <Typography sx={{ fontSize: 12, color: T2, mt: 0.125 }}>Nombre · día de pago mensual</Typography>
+          <Typography sx={{ fontSize: 12, color: T2, mt: 0.125 }}>Para agregar o eliminar ve a Configuración</Typography>
+        </Box>
+        <Box component="button" onClick={() => navigate('/config')} sx={{ px: 1.5, py: 0.5, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: 'transparent', color: T2, fontWeight: 600, fontSize: 12, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          + Config
         </Box>
       </Box>
 
@@ -292,33 +314,9 @@ function TarjetasConfig({ tarjetas, cuentas, onSave }) {
                 {dias === 0 ? '¡Hoy!' : `${dias}d`}
               </Typography>
             </Box>
-            <Box onClick={() => onSave(tarjetas.filter(x => x.id !== t.id))} sx={{ width: 28, height: 28, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: T2, flexShrink: 0, '&:active': { bgcolor: alpha(RED, 0.08), color: RED } }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </Box>
           </Box>
         );
       })}
-
-      {/* Formulario nueva tarjeta */}
-      <Box sx={{ display: 'flex', gap: 1, p: 2, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        <Box sx={{ flex: 2, minWidth: 130 }}>
-          <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>Nombre</Typography>
-          <Box component="input" value={nombre.trim()} onChange={e => setNombre(e.target.value)} placeholder="Ej: Nu, Visa..." onKeyDown={e => e.key === 'Enter' && add()}
-            sx={{ width: '100%', boxSizing: 'border-box', px: 1.25, py: 0.875, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: '#F9FAFB', fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', '&:focus': { borderColor: GREEN } }}
-          />
-        </Box>
-        <Box sx={{ flex: 1, minWidth: 90 }}>
-          <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>Día de pago</Typography>
-          <Box component="select" value={dia} onChange={e => setDia(e.target.value)}
-            sx={{ width: '100%', boxSizing: 'border-box', px: 1.25, py: 0.875, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: '#F9FAFB', fontSize: 13, fontFamily: 'inherit', color: dia ? T1 : T2, outline: 'none', cursor: 'pointer' }}>
-            <option value="">Día</option>
-            {DIAS.map(d => <option key={d} value={d}>{d}</option>)}
-          </Box>
-        </Box>
-        <Box component="button" onClick={add} disabled={!nombre.trim() || !dia} sx={{ px: 2, py: 0.875, borderRadius: '8px', border: 'none', cursor: nombre.trim() && dia ? 'pointer' : 'not-allowed', bgcolor: nombre.trim() && dia ? T1 : alpha('#919EAB', 0.16), color: nombre.trim() && dia ? '#fff' : T2, fontWeight: 700, fontSize: 13, fontFamily: 'inherit', whiteSpace: 'nowrap', transition: 'all 0.15s' }}>
-          + Agregar
-        </Box>
-      </Box>
     </Box>
   );
 }
@@ -326,7 +324,7 @@ function TarjetasConfig({ tarjetas, cuentas, onSave }) {
 // ── Main ────────────────────────────────────────────────────
 export default function TC() {
   const { state, saveTarjetas, addTransaccion, deleteTransaccion, mesActivo, liquidarTC } = useFinanzas();
-  const mes = mesActivo;
+  const [mes, setMes] = useState(mesActivo);
 
   const cuentas = state.cuentas || ['Nequi', 'Nu', 'Daviplata', 'Efectivo'];
 
@@ -386,7 +384,7 @@ export default function TC() {
         {/* Selector de mes */}
         <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, mb: 2.5, pb: 0.5 }}>
           {MESES.map((m, i) => (
-            <Box key={m} onClick={() => {}} sx={{
+            <Box key={m} onClick={() => setMes(m)} sx={{
               px: 1.75, py: 0.625, borderRadius: '20px', fontSize: 12, fontWeight: 600,
               whiteSpace: 'nowrap', cursor: 'pointer', border: '1px solid', flexShrink: 0,
               borderColor: m === mes ? T1 : BORDER, bgcolor: m === mes ? T1 : CARD, color: m === mes ? '#fff' : T2,
@@ -413,7 +411,7 @@ export default function TC() {
         )}
 
         {/* Config tarjetas */}
-        <TarjetasConfig tarjetas={state.tarjetas || []} cuentas={cuentas} onSave={saveTarjetas} />
+        <TarjetasConfig tarjetas={state.tarjetas || []} />
 
         {/* Extracto por tarjeta */}
         {(state.tarjetas || []).length > 0 && (
