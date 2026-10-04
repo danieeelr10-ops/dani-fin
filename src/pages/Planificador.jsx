@@ -164,7 +164,12 @@ export default function Planificador() {
   const [dragOverKey, setDragOverKey] = useState(null)
   const [quickAdd, setQuickAdd] = useState(null) // null cerrado, { fixedDate } abierto
   const [quickAddText, setQuickAddText] = useState('')
+  const [quickAddDate, setQuickAddDate] = useState('')
+  const [quickAddDateTouched, setQuickAddDateTouched] = useState(false)
+  const [quickAddEsFija, setQuickAddEsFija] = useState(false)
+  const [quickAddFijaDia, setQuickAddFijaDia] = useState(1) // lunes
   const quickAddInputRef = useRef(null)
+  const [expandedMonths, setExpandedMonths] = useState({})
 
   function setView(v) { setViewMode(v); ss(VIEW_LS_KEY, v) }
 
@@ -411,28 +416,41 @@ export default function Planificador() {
   }
 
   // ── Quick add flotante (estilo Todoist) ─────────────────────────────
-  // fixedDate != null: viene de tocar el "+" de una sección puntual de la
-  // lista (ej. "Mañana") — el texto completo es la tarea, sin interpretar
-  // fecha. fixedDate == null: viene del botón flotante principal — se
-  // interpreta la fecha en lenguaje natural dentro del texto.
+  // El texto interpreta la fecha en lenguaje natural solo para auto-completar
+  // el selector de fecha (quickAddDate) — ese selector es la fuente de verdad
+  // real al agregar, y queda siempre visible/editable para poder elegir el
+  // día a mano en vez de confiar a ciegas en el parseo. fixedDate != null:
+  // viene de tocar el "+" de una sección puntual de la lista — el selector
+  // arranca fijo en ese día y no se auto-actualiza con lo que se escriba.
   function openQuickAdd(fixedDate = null) {
+    const initDate = fixedDate || today
     setQuickAdd({ fixedDate })
     setQuickAddText('')
+    setQuickAddDate(initDate)
+    setQuickAddDateTouched(!!fixedDate)
+    setQuickAddEsFija(false)
+    setQuickAddFijaDia(new Date(`${initDate}T12:00:00`).getDay())
     setTimeout(() => quickAddInputRef.current?.focus(), 50)
   }
   function closeQuickAdd() {
     setQuickAdd(null)
     setQuickAddText('')
   }
+  function handleQuickAddTextChange(val) {
+    setQuickAddText(val)
+    if (!quickAddDateTouched && !quickAdd?.fixedDate) {
+      setQuickAddDate(parseQuickAdd(val).dateKey)
+    }
+  }
   function submitQuickAdd() {
     const raw = quickAddText.trim()
     if (!raw) return
-    if (quickAdd?.fixedDate) {
-      addTask(quickAdd.fixedDate, raw)
+    const text = parseQuickAdd(raw).text || raw
+    if (quickAddEsFija) {
+      setTareasFijas(prev => [...prev, { id: uid(), texto: text, dia: quickAddFijaDia }])
+      showToast(`📌 Tarea fija creada — se repite cada ${DIAS[DIA_GETDAY.indexOf(quickAddFijaDia)]}`)
     } else {
-      const parsed = parseQuickAdd(raw)
-      if (!parsed.text) return
-      addTask(parsed.dateKey, parsed.text)
+      addTask(quickAddDate, text)
     }
     setQuickAddText('')
     quickAddInputRef.current?.focus()
@@ -596,6 +614,22 @@ export default function Planificador() {
       rest: ordenadas.filter(k => k > tomorrowKey),
     }
   }, [tasks, today, tomorrowKey])
+
+  // Lo que no es Hoy/Mañana se agrupa por mes y arranca colapsado — con
+  // tareas fijas poblando muchos días por delante, una lista plana de
+  // encabezados por día se volvía interminable. El mes actual arranca
+  // abierto (lo más relevante); el resto colapsado hasta que lo tocás.
+  const restByMonth = useMemo(() => {
+    const map = {}
+    for (const k of listaGroups.rest) {
+      const mk = k.slice(0, 7)
+      ;(map[mk] ||= []).push(k)
+    }
+    return map
+  }, [listaGroups.rest])
+  const todayMonthKey = today.slice(0, 7)
+  function isMonthOpen(mk) { return expandedMonths[mk] !== undefined ? expandedMonths[mk] : mk === todayMonthKey }
+  function toggleMonth(mk) { setExpandedMonths(prev => ({ ...prev, [mk]: !isMonthOpen(mk) })) }
 
   function sectionLabelFor(dateKey) {
     if (dateKey === today) return 'Hoy'
@@ -881,7 +915,26 @@ export default function Planificador() {
           )}
           {renderDaySection(today)}
           {renderDaySection(tomorrowKey)}
-          {listaGroups.rest.map(k => renderDaySection(k))}
+
+          {Object.entries(restByMonth).map(([mk, keys]) => {
+            const totalTasks = keys.reduce((s, k) => s + (tasks[k] || []).length, 0)
+            const doneTasks  = keys.reduce((s, k) => s + (tasks[k] || []).filter(t => t.done).length, 0)
+            const label = capitalize(new Date(`${mk}-01T12:00:00`).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' }))
+            const open = isMonthOpen(mk)
+            return (
+              <Box key={mk} sx={{ mb: 1.5 }}>
+                <Box onClick={() => toggleMonth(mk)} sx={{
+                  display: 'flex', alignItems: 'center', gap: 1, py: 1, px: 0.5, cursor: 'pointer',
+                  borderBottom: `1px solid ${BORDER}`,
+                }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: T1, flex: 1 }}>{label}</Typography>
+                  <Typography sx={{ fontSize: 11.5, color: T2 }}>{totalTasks ? `${doneTasks}/${totalTasks}` : 'Sin tareas'}</Typography>
+                  <Typography sx={{ fontSize: 10, color: T2, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</Typography>
+                </Box>
+                {open && <Box sx={{ pt: 1.25 }}>{keys.map(k => renderDaySection(k))}</Box>}
+              </Box>
+            )
+          })}
         </Box>
       )}
 
@@ -1222,17 +1275,46 @@ export default function Planificador() {
             <Box component="input"
               ref={quickAddInputRef}
               value={quickAddText}
-              onChange={e => setQuickAddText(e.target.value)}
+              onChange={e => handleQuickAddTextChange(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') submitQuickAdd(); if (e.key === 'Escape') closeQuickAdd() }}
               placeholder="Ej: Pagar arriendo mañana"
               autoFocus
               sx={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', fontSize: 16, fontFamily: 'inherit', color: T1, py: 0.5 }} />
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1.25 }}>
-              <Typography sx={{ fontSize: 11.5, color: GREEN, fontWeight: 600 }}>
-                📅 {quickAdd.fixedDate
-                  ? sectionLabelFor(quickAdd.fixedDate)
-                  : sectionLabelFor(parseQuickAdd(quickAddText).dateKey)}
-              </Typography>
+
+            {/* Puntual (fecha explícita) vs fija (se repite cada semana) */}
+            <Box sx={{ display: 'flex', gap: 0.75, mt: 1.25, mb: 1 }}>
+              <Box onClick={() => setQuickAddEsFija(false)} sx={{
+                px: 1.25, py: 0.5, borderRadius: '8px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                border: '1px solid', borderColor: !quickAddEsFija ? GREEN : BORDER,
+                bgcolor: !quickAddEsFija ? alpha(GREEN, 0.1) : 'transparent', color: !quickAddEsFija ? GREEN : T2,
+              }}>📅 Un día</Box>
+              <Box onClick={() => setQuickAddEsFija(true)} sx={{
+                px: 1.25, py: 0.5, borderRadius: '8px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                border: '1px solid', borderColor: quickAddEsFija ? AMBER : BORDER,
+                bgcolor: quickAddEsFija ? alpha(AMBER, 0.1) : 'transparent', color: quickAddEsFija ? AMBER : T2,
+              }}>🔁 Cada semana</Box>
+            </Box>
+
+            {quickAddEsFija ? (
+              <Box sx={{ display: 'flex', gap: 0.5, mb: 1.25 }}>
+                {DIAS.map((label, i) => (
+                  <Box key={label} onClick={() => setQuickAddFijaDia(DIA_GETDAY[i])} sx={{
+                    width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                    border: '1px solid', borderColor: quickAddFijaDia === DIA_GETDAY[i] ? AMBER : BORDER,
+                    bgcolor: quickAddFijaDia === DIA_GETDAY[i] ? AMBER : 'transparent',
+                    color: quickAddFijaDia === DIA_GETDAY[i] ? '#fff' : T2,
+                  }}>{DIA_LETRAS[i]}</Box>
+                ))}
+              </Box>
+            ) : (
+              <Box component="input" type="date" value={quickAddDate}
+                onChange={e => { setQuickAddDate(e.target.value); setQuickAddDateTouched(true) }}
+                sx={{ mb: 1.25, border: `1px solid ${BORDER}`, borderRadius: '8px', px: 1.25, py: 0.625, fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', bgcolor: '#fff' }} />
+            )}
+
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
               <Box sx={{ display: 'flex', gap: 0.75 }}>
                 <Box component="button" onClick={closeQuickAdd} sx={{ px: 1.25, py: 0.625, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: 'transparent', color: T2, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cerrar</Box>
                 <Box component="button" onClick={submitQuickAdd} sx={{ px: 1.5, py: 0.625, borderRadius: '8px', border: 'none', bgcolor: GREEN, color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Agregar</Box>
