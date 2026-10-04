@@ -92,13 +92,83 @@ const PERFILES = [
   { key: 'mixto',    label: 'Mixto',            desc: 'Tienes ingresos fijos + variables',               icono: '⚡' },
 ];
 
+function fmtBackupFecha(ts) {
+  if (!ts) return ''
+  return new Date(ts).toLocaleString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
 export default function Configuracion() {
-  const { state, saveConfig, resetAll, savePerfilIngresos, saveNombreUsuario } = useFinanzas();
+  const { state, saveConfig, resetAll, restoreFromBackup, savePerfilIngresos, saveNombreUsuario, saveTarjetas } = useFinanzas();
   const { showSnackbar } = useSnackbar();
   const [nombre, setNombre] = useState(state.nombreUsuario || '');
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmRestore, setConfirmRestore] = useState(false);
+  const [backupInfo] = useState(() => {
+    try {
+      const raw = localStorage.getItem('dani_fin_backup');
+      if (!raw) return null;
+      const b = JSON.parse(raw);
+      return {
+        backupAt: b.backupAt,
+        cuentasExternas: (b.cuentasExternas || []).map(c => c.nombre),
+        transacciones: (b.transacciones || []).length,
+      };
+    } catch { return null; }
+  });
+
+  function handleRestore() {
+    const ok = restoreFromBackup();
+    setConfirmRestore(false);
+    showSnackbar(ok ? 'Respaldo restaurado' : 'No se encontró respaldo', ok ? 'success' : 'error');
+  }
   const { notifPermission, requestNotifPermission } = usePWA();
   const [reminders, setReminders] = useState(() => getReminders());
+
+  const tarjetas = state.tarjetas || [];
+  const [tcNombre, setTcNombre] = useState('');
+  const [tcDia,    setTcDia]    = useState('');
+  const [tcCorte,  setTcCorte]  = useState('');
+
+  // Edición inline de tarjeta existente
+  const [editId,     setEditId]     = useState(null);
+  const [editNombre, setEditNombre] = useState('');
+  const [editCorte,  setEditCorte]  = useState('');
+  const [editDia,    setEditDia]    = useState('');
+
+  function startEdit(t) {
+    setEditId(t.id);
+    setEditNombre(t.nombre);
+    setEditCorte(t.fechaCorte ? String(t.fechaCorte) : '');
+    setEditDia(String(t.diaPago));
+  }
+
+  function saveEdit() {
+    const n = editNombre.trim();
+    const d = parseInt(editDia);
+    const c = editCorte ? parseInt(editCorte) : null;
+    if (!n || !d || d < 1 || d > 28) return;
+    if (c && (c < 1 || c > 28)) return;
+    saveTarjetas(tarjetas.map(t =>
+      t.id === editId ? { ...t, nombre: n, diaPago: d, ...(c ? { fechaCorte: c } : { fechaCorte: undefined }) } : t
+    ));
+    setEditId(null);
+    showSnackbar('Tarjeta actualizada', 'success');
+  }
+
+  function addTarjeta() {
+    const n = tcNombre.trim();
+    const d = parseInt(tcDia);
+    const c = tcCorte ? parseInt(tcCorte) : null;
+    if (!n || !d || d < 1 || d > 28) return;
+    if (c && (c < 1 || c > 28)) return;
+    saveTarjetas([...tarjetas, { id: Date.now(), nombre: n, diaPago: d, ...(c ? { fechaCorte: c } : {}) }]);
+    setTcNombre(''); setTcDia(''); setTcCorte('');
+    showSnackbar('Tarjeta agregada', 'success');
+  }
+
+  function delTarjeta(id) {
+    saveTarjetas(tarjetas.filter(t => t.id !== id));
+  }
 
   const [egresoFijo,     setEgresoFijo]     = useState([...state.categoriasEgresoFijo]);
   const [egresoVariable, setEgresoVariable] = useState([...state.categoriasEgresoVariable]);
@@ -215,6 +285,131 @@ export default function Configuracion() {
           </Box>
         </Box>
 
+        {/* Tarjetas de crédito */}
+        <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, border: `1px solid ${BORDER}`, p: 2.5, mb: 3 }}>
+          <Typography sx={{ fontSize: 14, fontWeight: 700, color: T1, mb: 0.5 }}>Tarjetas de crédito</Typography>
+          <Typography sx={{ fontSize: 12, color: T2, mb: 1.75 }}>Agrégalas aquí y aparecerán en la sección T.C para detallar cargos y pagos.</Typography>
+
+          {/* Lista de tarjetas */}
+          {tarjetas.length > 0 && (
+            <Box sx={{ mb: 1.75, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              {tarjetas.map(t => editId === t.id ? (
+                /* ── Formulario edición inline ── */
+                <Box key={t.id} sx={{ p: 1.5, borderRadius: '10px', border: `1.5px solid ${GREEN}`, bgcolor: '#F9FAFB' }}>
+                  <Typography sx={{ fontSize: 11, fontWeight: 700, color: GREEN, mb: 1, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Editar tarjeta</Typography>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
+                    <Box sx={{ flex: 2, minWidth: 120 }}>
+                      <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.4 }}>Nombre</Typography>
+                      <Box component="input" value={editNombre} onChange={e => setEditNombre(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && saveEdit()}
+                        sx={{ ...inputSx }} />
+                    </Box>
+                    <Box sx={{ flex: 1, minWidth: 80 }}>
+                      <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.4 }}>Fecha corte</Typography>
+                      <Box component="input" type="number" value={editCorte} onChange={e => setEditCorte(e.target.value)}
+                        placeholder="Ej: 20" min={1} max={28}
+                        onKeyDown={e => e.key === 'Enter' && saveEdit()}
+                        sx={{ ...inputSx }} />
+                    </Box>
+                    <Box sx={{ flex: 1, minWidth: 80 }}>
+                      <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.4 }}>Día pago</Typography>
+                      <Box component="input" type="number" value={editDia} onChange={e => setEditDia(e.target.value)}
+                        placeholder="Ej: 10" min={1} max={28}
+                        onKeyDown={e => e.key === 'Enter' && saveEdit()}
+                        sx={{ ...inputSx }} />
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 0.75 }}>
+                    <Box component="button" onClick={saveEdit} sx={{
+                      px: 2, py: 0.625, borderRadius: '8px', border: 'none', bgcolor: GREEN, color: '#fff',
+                      fontWeight: 700, fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
+                    }}>Guardar</Box>
+                    <Box component="button" onClick={() => setEditId(null)} sx={{
+                      px: 2, py: 0.625, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: 'transparent',
+                      color: T2, fontWeight: 600, fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
+                    }}>Cancelar</Box>
+                  </Box>
+                </Box>
+              ) : (
+                /* ── Fila normal ── */
+                <Box key={t.id} sx={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  px: 1.5, py: 1, borderRadius: '10px', border: `1px solid ${BORDER}`, bgcolor: '#FAFAFA',
+                  '&:hover .tc-actions': { opacity: 1 },
+                }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                    <Typography sx={{ fontSize: 18, lineHeight: 1 }}>💳</Typography>
+                    <Box>
+                      <Typography sx={{ fontSize: 13, fontWeight: 600, color: T1 }}>{t.nombre}</Typography>
+                      <Typography sx={{ fontSize: 11, color: T2 }}>
+                        {t.fechaCorte ? `Corte: día ${t.fechaCorte} · ` : ''}Pago: día {t.diaPago}
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Box className="tc-actions" sx={{ display: 'flex', gap: 0.5, opacity: 0, transition: 'opacity 0.15s' }}>
+                    {/* Editar */}
+                    <Box onClick={() => startEdit(t)} sx={{
+                      width: 28, height: 28, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer', color: T2, '&:hover': { bgcolor: alpha(GREEN, 0.08), color: GREEN },
+                    }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </Box>
+                    {/* Eliminar */}
+                    <Box onClick={() => delTarjeta(t.id)} sx={{
+                      width: 28, height: 28, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer', color: T2, '&:hover': { bgcolor: alpha(RED, 0.08), color: RED },
+                    }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </Box>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          )}
+
+          {/* Formulario nueva tarjeta */}
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <Box sx={{ flex: 2, minWidth: 140 }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>Nombre</Typography>
+              <Box component="input" value={tcNombre} onChange={e => setTcNombre(e.target.value)}
+                placeholder="Ej: Nu, Visa, HSBC..."
+                onKeyDown={e => e.key === 'Enter' && addTarjeta()}
+                sx={{ ...inputSx }} />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 90 }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>Fecha de corte</Typography>
+              <Box component="input" type="number" value={tcCorte} onChange={e => setTcCorte(e.target.value)}
+                placeholder="Ej: 20" min={1} max={28}
+                onKeyDown={e => e.key === 'Enter' && addTarjeta()}
+                sx={{ ...inputSx }} />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 90 }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, mb: 0.5 }}>Día de pago</Typography>
+              <Box component="input" type="number" value={tcDia} onChange={e => setTcDia(e.target.value)}
+                placeholder="Ej: 10" min={1} max={28}
+                onKeyDown={e => e.key === 'Enter' && addTarjeta()}
+                sx={{ ...inputSx }} />
+            </Box>
+            <Box component="button" onClick={addTarjeta}
+              disabled={!tcNombre.trim() || !tcDia || parseInt(tcDia) < 1 || parseInt(tcDia) > 28}
+              sx={{
+                px: 2, py: 0.875, borderRadius: '8px', border: 'none', fontFamily: 'inherit',
+                fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
+                bgcolor: tcNombre.trim() && tcDia ? T1 : alpha('#919EAB', 0.16),
+                color: tcNombre.trim() && tcDia ? '#fff' : T2,
+                transition: 'all 0.15s',
+                '&:disabled': { cursor: 'not-allowed' },
+              }}>
+              + Agregar
+            </Box>
+          </Box>
+        </Box>
+
         {/* Notificaciones */}
         <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, border: `1px solid ${BORDER}`, p: 2.5, mb: 3 }}>
           <Typography sx={{ fontSize: 14, fontWeight: 700, color: T1, mb: 0.5 }}>Notificaciones</Typography>
@@ -226,7 +421,7 @@ export default function Configuracion() {
                 <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: GREEN, flexShrink: 0 }} />
                 <Typography sx={{ fontSize: 12, fontWeight: 600, color: GREEN }}>Permiso concedido</Typography>
               </Box>
-              <Box component="button" onClick={() => showNotification('Dani Fin · Prueba', 'Las notificaciones funcionan correctamente')}
+              <Box component="button" onClick={() => showNotification('Rumbo · Prueba', 'Las notificaciones funcionan correctamente')}
                 sx={{ px: 2, py: 0.875, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: 'transparent', color: T1, fontWeight: 600, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left' }}>
                 Enviar notificación de prueba
               </Box>
@@ -264,6 +459,37 @@ export default function Configuracion() {
             </Box>
           )}
         </Box>
+
+        {/* Respaldo local */}
+        {backupInfo && (
+          <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, border: `1px solid ${BORDER}`, p: 2.5, mb: 3 }}>
+            <Typography sx={{ fontSize: 14, fontWeight: 700, color: T1, mb: 0.5 }}>Respaldo local</Typography>
+            <Typography sx={{ fontSize: 12, color: T2, mb: 1.5 }}>
+              Guardado el {fmtBackupFecha(backupInfo.backupAt)} en este navegador · {backupInfo.transacciones} transacciones
+              {backupInfo.cuentasExternas.length > 0 ? ` · Cuentas externas: ${backupInfo.cuentasExternas.join(', ')}` : ''}
+            </Typography>
+            {!confirmRestore ? (
+              <Box component="button" onClick={() => setConfirmRestore(true)} sx={{
+                px: 2, py: 0.875, borderRadius: '8px', border: `1px solid ${BORDER}`,
+                bgcolor: 'transparent', color: T1, fontWeight: 700, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer',
+              }}>
+                Restaurar este respaldo
+              </Box>
+            ) : (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
+                <Typography sx={{ fontSize: 13, fontWeight: 600, color: RED }}>Esto reemplaza tus datos actuales por los del respaldo. ¿Seguro?</Typography>
+                <Box component="button" onClick={handleRestore}
+                  sx={{ px: 2, py: 0.75, borderRadius: '8px', border: 'none', bgcolor: RED, color: '#fff', fontWeight: 700, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>
+                  Sí, restaurar
+                </Box>
+                <Box component="button" onClick={() => setConfirmRestore(false)}
+                  sx={{ px: 2, py: 0.75, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: 'transparent', color: T2, fontWeight: 600, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>
+                  Cancelar
+                </Box>
+              </Box>
+            )}
+          </Box>
+        )}
 
         {/* Zona de peligro */}
         <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, border: `1.5px solid ${alpha(RED, 0.25)}`, p: 2.5 }}>
