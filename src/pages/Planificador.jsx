@@ -915,7 +915,7 @@ export default function Planificador() {
           son tarjetas por mes; tocar una tarjeta abre ese mes ahí mismo (no en
           una ventana flotante aparte) con un botón para volver a la grilla. */}
       {viewMode === 'lista' && (
-        <Box sx={{ px: 3, pb: 14, maxWidth: 640 }}>
+        <Box sx={{ px: 3, pb: 14, maxWidth: 900, mx: 'auto' }}>
           {renderDaySection(today)}
           {renderDaySection(tomorrowKey)}
 
