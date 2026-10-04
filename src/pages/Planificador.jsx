@@ -70,6 +70,58 @@ function buildMonthGrid(anchor) {
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7) }
 function redirectUri() { return `${window.location.origin}/planificador` }
 function fmtClock(s) { const m = Math.floor(s / 60); const r = s % 60; return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}` }
+function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s }
+
+const DIA_SEMANA_MAP = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6 }
+
+// Interpreta fechas en lenguaje natural dentro del texto de una tarea nueva
+// (ej. "Pagar arriendo mañana", "Llamar al banco el viernes") — igual que el
+// quick-add de Todoist, para no tener que elegir la fecha a mano casi nunca.
+function parseQuickAdd(raw) {
+  let text = (raw || '').trim()
+  const hoy = new Date()
+  function strip(re) { text = text.replace(re, ' ').replace(/\s{2,}/g, ' ').trim() }
+
+  if (/\bpasado\s+ma(?:n|ñ)ana\b/i.test(text)) {
+    strip(/\bpasado\s+ma(?:n|ñ)ana\b/i)
+    return { text, dateKey: toKey(addDays(hoy, 2)) }
+  }
+  if (/\bma(?:n|ñ)ana\b/i.test(text)) {
+    strip(/\bma(?:n|ñ)ana\b/i)
+    return { text, dateKey: toKey(addDays(hoy, 1)) }
+  }
+  if (/\bhoy\b/i.test(text)) {
+    strip(/\bhoy\b/i)
+    return { text, dateKey: toKey(hoy) }
+  }
+  const enDias = text.match(/\ben\s+(\d{1,2})\s+d[ií]as?\b/i)
+  if (enDias) {
+    strip(/\ben\s+\d{1,2}\s+d[ií]as?\b/i)
+    return { text, dateKey: toKey(addDays(hoy, parseInt(enDias[1], 10))) }
+  }
+  const fechaExplicita = text.match(/\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/)
+  if (fechaExplicita) {
+    strip(/\b\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\b/)
+    const dia = parseInt(fechaExplicita[1], 10)
+    const mes = parseInt(fechaExplicita[2], 10) - 1
+    const anioStr = fechaExplicita[3]
+    const anio = anioStr ? (anioStr.length === 2 ? 2000 + parseInt(anioStr, 10) : parseInt(anioStr, 10)) : hoy.getFullYear()
+    const d = new Date(anio, mes, dia)
+    if (!isNaN(d.getTime())) return { text, dateKey: toKey(d) }
+  }
+  const diaSemana = text.match(/\b(?:el\s+|este\s+|pr[oó]ximo\s+)?(domingo|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado)\b/i)
+  if (diaSemana) {
+    const esProximo = /pr[oó]ximo\s+/i.test(diaSemana[0])
+    strip(new RegExp(diaSemana[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'))
+    const nombre = diaSemana[1].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    const target = DIA_SEMANA_MAP[nombre]
+    let diff = (target - hoy.getDay() + 7) % 7
+    if (esProximo) diff += 7
+    return { text, dateKey: toKey(addDays(hoy, diff)) }
+  }
+
+  return { text, dateKey: toKey(hoy) }
+}
 
 function buildGoogleAuthUrl() {
   const params = new URLSearchParams({
@@ -105,11 +157,14 @@ export default function Planificador() {
   const [pomodoroRunning, setPomodoroRunning] = useState(false)
   const pomodoroNotified = useRef(false)
   const nuevasFijasRef = useRef([])
-  const [viewMode, setViewMode] = useState(() => ls(VIEW_LS_KEY, 'semana'))
+  const [viewMode, setViewMode] = useState(() => ls(VIEW_LS_KEY, 'lista'))
   const [monthAnchor, setMonthAnchor] = useState(new Date())
   const [monthDayOpen, setMonthDayOpen] = useState(null) // dateKey del día abierto en el mes, o null
   const [draggedTask, setDraggedTask] = useState(null) // { fromKey, taskId }
   const [dragOverKey, setDragOverKey] = useState(null)
+  const [quickAdd, setQuickAdd] = useState(null) // null cerrado, { fixedDate } abierto
+  const [quickAddText, setQuickAddText] = useState('')
+  const quickAddInputRef = useRef(null)
 
   function setView(v) { setViewMode(v); ss(VIEW_LS_KEY, v) }
 
@@ -128,6 +183,7 @@ export default function Planificador() {
   const weekStart = useMemo(() => startOfWeek(weekAnchor), [weekAnchor.getTime()])
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
   const today = toKey(new Date())
+  const tomorrowKey = toKey(addDays(new Date(), 1))
   const onCurrentWeek = weekDays.some(d => toKey(d) === today)
 
   // Semana visible + mes actual y el siguiente completos — así las tareas
@@ -330,13 +386,16 @@ export default function Planificador() {
     showToast('Google Calendar desconectado')
   }
 
-  async function addTask(dateKey) {
-    const text = (inputs[dateKey] || '').trim()
+  // textOverride permite agregar sin pasar por el input de cada día — lo usa
+  // el quick-add flotante, que ya trae el texto limpio (sin la fecha en
+  // lenguaje natural, que ya se usó para elegir dateKey).
+  async function addTask(dateKey, textOverride) {
+    const text = (textOverride ?? inputs[dateKey] ?? '').trim()
     if (!text) return
     const newTask = { id: uid(), text, done: false }
     const next = { ...tasks, [dateKey]: [...(tasks[dateKey] || []), newTask] }
     persist(next)
-    setInputs(prev => ({ ...prev, [dateKey]: '' }))
+    if (textOverride == null) setInputs(prev => ({ ...prev, [dateKey]: '' }))
 
     if (connected) {
       const { data } = await supabase.functions.invoke('google-calendar', { body: { action: 'upsert', task: text, date: dateKey } })
@@ -349,6 +408,34 @@ export default function Planificador() {
     if (notionData?.ok && notionData.notion_page_id) {
       setTasks(prev => ({ ...prev, [dateKey]: (prev[dateKey] || []).map(t => t.id === newTask.id ? { ...t, notion_page_id: notionData.notion_page_id } : t) }))
     }
+  }
+
+  // ── Quick add flotante (estilo Todoist) ─────────────────────────────
+  // fixedDate != null: viene de tocar el "+" de una sección puntual de la
+  // lista (ej. "Mañana") — el texto completo es la tarea, sin interpretar
+  // fecha. fixedDate == null: viene del botón flotante principal — se
+  // interpreta la fecha en lenguaje natural dentro del texto.
+  function openQuickAdd(fixedDate = null) {
+    setQuickAdd({ fixedDate })
+    setQuickAddText('')
+    setTimeout(() => quickAddInputRef.current?.focus(), 50)
+  }
+  function closeQuickAdd() {
+    setQuickAdd(null)
+    setQuickAddText('')
+  }
+  function submitQuickAdd() {
+    const raw = quickAddText.trim()
+    if (!raw) return
+    if (quickAdd?.fixedDate) {
+      addTask(quickAdd.fixedDate, raw)
+    } else {
+      const parsed = parseQuickAdd(raw)
+      if (!parsed.text) return
+      addTask(parsed.dateKey, parsed.text)
+    }
+    setQuickAddText('')
+    quickAddInputRef.current?.focus()
   }
 
   function toggleTask(dateKey, id) {
@@ -486,9 +573,161 @@ export default function Planificador() {
   const weekTaskDone = weekDays.reduce((acc, d) => acc + (tasks[toKey(d)] || []).filter(t => t.done).length, 0)
   const weekTaskPct = weekTaskTotal ? Math.round(weekTaskDone / weekTaskTotal * 100) : 0
 
+  const todayTasksList = tasks[today] || []
+  const todayTaskTotal = todayTasksList.length
+  const todayTaskDone  = todayTasksList.filter(t => t.done).length
+  const todayTaskPct   = todayTaskTotal ? Math.round(todayTaskDone / todayTaskTotal * 100) : 0
+
   const monthLabel = monthAnchor.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })
   const monthGrid = useMemo(() => buildMonthGrid(monthAnchor), [monthAnchor.getFullYear(), monthAnchor.getMonth()])
   const monthDayData = monthDayOpen ? new Date(`${monthDayOpen}T12:00:00`) : null
+
+  // ── Vista Lista (estilo Todoist) ─────────────────────────────────────
+  // Agrupa por fecha en vez de por columnas: Vencidas, Hoy, Mañana y después
+  // un encabezado por cada día siguiente que tenga tareas (los vacíos no se
+  // muestran, salvo Hoy/Mañana que siempre aparecen para poder agregar ahí).
+  const listaGroups = useMemo(() => {
+    const conTareas = new Set(Object.keys(tasks).filter(k => (tasks[k] || []).length > 0))
+    conTareas.add(today)
+    conTareas.add(tomorrowKey)
+    const ordenadas = Array.from(conTareas).sort()
+    return {
+      overdue: ordenadas.filter(k => k < today),
+      rest: ordenadas.filter(k => k > tomorrowKey),
+    }
+  }, [tasks, today, tomorrowKey])
+
+  function sectionLabelFor(dateKey) {
+    if (dateKey === today) return 'Hoy'
+    if (dateKey === tomorrowKey) return 'Mañana'
+    const d = new Date(`${dateKey}T12:00:00`)
+    const diffDays = Math.round((d - new Date(`${today}T12:00:00`)) / 86400000)
+    const raw = diffDays >= 0 && diffDays <= 6
+      ? d.toLocaleDateString('es-CO', { weekday: 'long' })
+      : d.toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })
+    return capitalize(raw)
+  }
+
+  // Una sección por día — misma data y acciones que la vista semana (toggle,
+  // borrar, recordatorio, drag&drop entre días), pero como lista plana sin
+  // tarjetas, más parecida a Todoist.
+  function renderDaySection(dateKey, { accent } = {}) {
+    const dayTasks = filters.tareas
+      ? [...(tasks[dateKey] || [])].sort((a, b) => (b.fijaId ? 1 : 0) - (a.fijaId ? 1 : 0))
+      : []
+    const dayGoogleEvents = (googleEvents[dateKey] || []).filter(ev => filters[ev.source] !== false)
+    const total = dayTasks.length
+    const doneCount = dayTasks.filter(t => t.done).length
+    const isDragOver = dragOverKey === dateKey
+    return (
+      <Box key={dateKey}
+        onDragOver={evt => handleDayDragOver(evt, dateKey)}
+        onDragLeave={() => setDragOverKey(prev => (prev === dateKey ? null : prev))}
+        onDrop={evt => handleDayDrop(evt, dateKey)}
+        sx={{
+          mb: 2.5, borderRadius: '12px', p: isDragOver ? 1 : 0,
+          outline: isDragOver ? `2px dashed ${alpha(GREEN, 0.4)}` : 'none',
+          bgcolor: isDragOver ? alpha(GREEN, 0.04) : 'transparent',
+          transition: 'background-color .1s',
+        }}>
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 1 }}>
+          <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: accent || T1 }}>{sectionLabelFor(dateKey)}</Typography>
+          {total > 0 && <Typography sx={{ fontSize: 11.5, color: T2 }}>{doneCount}/{total}</Typography>}
+          <Box onClick={() => openQuickAdd(dateKey)} sx={{
+            ml: 'auto', cursor: 'pointer', color: T2, opacity: 0.55, fontSize: 17, lineHeight: 1,
+            '&:hover': { opacity: 1, color: GREEN },
+          }}>+</Box>
+        </Box>
+
+        {dayGoogleEvents.length > 0 && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 1 }}>
+            {dayGoogleEvents.map(ev => {
+              const c = ev.source === 'vektor' ? '#F97316' : BLUE
+              return (
+                <Box key={ev.id} component="a" href={ev.htmlLink} target="_blank" rel="noreferrer" sx={{
+                  display: 'flex', alignItems: 'center', gap: 1, textDecoration: 'none',
+                  bgcolor: alpha(c, 0.06), border: `1px solid ${alpha(c, 0.18)}`, borderRadius: '8px', px: 1, py: 0.625,
+                }}>
+                  <Typography sx={{ fontSize: 11 }}>{ev.source === 'vektor' ? '🏋️' : '🔗'}</Typography>
+                  <Typography sx={{ flex: 1, fontSize: 12.5, color: c, fontWeight: 500 }}>{ev.title}</Typography>
+                  {!ev.allDay && (
+                    <Typography sx={{ fontSize: 10.5, color: c, opacity: 0.8 }}>
+                      {new Date(ev.start).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })}
+                    </Typography>
+                  )}
+                </Box>
+              )
+            })}
+          </Box>
+        )}
+
+        {dayTasks.length === 0 ? (
+          <Typography sx={{ fontSize: 12.5, color: T2, opacity: 0.6, py: 0.5 }}>Sin tareas</Typography>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            {dayTasks.map(t => (
+              <Box key={t.id}
+                draggable
+                onDragStart={evt => handleTaskDragStart(evt, dateKey, t.id)}
+                onDragEnd={() => { setDraggedTask(null); setDragOverKey(null) }}
+                sx={{
+                  borderBottom: `1px solid ${BORDER}`, cursor: 'grab',
+                  opacity: draggedTask?.taskId === t.id ? 0.4 : 1,
+                }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, py: 0.875 }}>
+                  <Box onClick={() => toggleTask(dateKey, t.id)} sx={{
+                    width: 20, height: 20, borderRadius: '50%', flexShrink: 0, cursor: 'pointer',
+                    border: `1.5px solid ${t.done ? GREEN : (t.fijaId ? AMBER : '#C7CBD1')}`,
+                    bgcolor: t.done ? GREEN : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'border-color .15s, background-color .15s',
+                    '@keyframes popIn': { '0%': { transform: 'scale(1)' }, '50%': { transform: 'scale(1.3)' }, '100%': { transform: 'scale(1)' } },
+                    animation: t.done ? 'popIn 0.22s ease' : 'none',
+                  }}>
+                    {t.done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                  </Box>
+                  <Typography sx={{ flex: 1, fontSize: 14, color: t.done ? T2 : T1, textDecoration: t.done ? 'line-through' : 'none', transition: 'color .15s' }}>{t.text}</Typography>
+                  {t.google_event_id && <Typography sx={{ fontSize: 10, color: BLUE, opacity: 0.55 }}>🔗</Typography>}
+                  {t.notion_page_id && <Typography sx={{ fontSize: 10, opacity: 0.55 }}>📝</Typography>}
+                  <Box onClick={() => setRemindingId(remindingId === t.id ? null : t.id)} sx={{
+                    display: 'flex', alignItems: 'center', gap: 0.25, cursor: 'pointer', flexShrink: 0,
+                    color: t.remind_at ? AMBER : T2, opacity: t.remind_at ? 1 : 0.4,
+                  }}>
+                    <Typography sx={{ fontSize: 12 }}>⏰</Typography>
+                    {t.remind_at && (
+                      <Typography sx={{ fontSize: 10.5, fontWeight: 600 }}>
+                        {new Date(t.remind_at).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Bogota' })}
+                      </Typography>
+                    )}
+                  </Box>
+                  <Box onClick={() => deleteTask(dateKey, t.id)} sx={{
+                    width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', color: T2, opacity: 0.4, fontSize: 15, flexShrink: 0,
+                    '&:hover': { opacity: 1, color: '#DC2626' },
+                  }}>×</Box>
+                </Box>
+                {remindingId === t.id && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 0.875, pl: 3.75 }}>
+                    <Box component="input" type="time"
+                      defaultValue={t.remind_at ? new Date(t.remind_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Bogota' }) : ''}
+                      onChange={e => handleReminderTime(dateKey, t, e.target.value)}
+                      disabled={pushBusy}
+                      sx={{ border: `1px solid ${BORDER}`, borderRadius: '6px', px: 1, py: 0.375, fontSize: 12, fontFamily: 'inherit', color: T1, outline: 'none', bgcolor: '#fff' }} />
+                    {t.remind_at && (
+                      <Box component="button" onClick={() => handleReminderTime(dateKey, t, '')}
+                        sx={{ fontSize: 11, color: T2, background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Quitar
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Box>
+    )
+  }
 
   return (
     <Box sx={{ bgcolor: BG, minHeight: '100%' }}>
@@ -500,7 +739,7 @@ export default function Planificador() {
             <Typography sx={{ fontSize: 13, color: T2, mt: 0.25 }}>Organiza tu semana, día a día</Typography>
           </Box>
           <Box sx={{ display: 'flex', gap: 0.25, bgcolor: '#F3F4F6', border: `1px solid ${BORDER}`, borderRadius: '10px', p: 0.375, flexShrink: 0 }}>
-            {[['semana', 'Semana'], ['mes', 'Mes']].map(([id, label]) => (
+            {[['lista', 'Lista'], ['semana', 'Semana'], ['mes', 'Mes']].map(([id, label]) => (
               <Box key={id} component="button" onClick={() => setView(id)} sx={{
                 px: 1.25, py: 0.625, borderRadius: '8px', border: 'none', cursor: 'pointer',
                 fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
@@ -511,17 +750,26 @@ export default function Planificador() {
           </Box>
         </Box>
 
-        {/* Barra de progreso semanal — agregada de todas las tareas de la semana
-            visible, se resetea sola al cambiar de semana (no acumula histórico) */}
-        <Box sx={{ px: 3, mb: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-            <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: T2, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Progreso de la semana</Typography>
-            <Typography sx={{ fontSize: 11.5, color: T2 }}>{weekTaskTotal ? `${weekTaskDone}/${weekTaskTotal} · ${weekTaskPct}%` : 'Sin tareas'}</Typography>
+        {/* Barra de progreso — de hoy en la lista, de la semana visible en
+            semana; en mes no se muestra (la grilla ya tiene su propio
+            mini-progreso por día). */}
+        {viewMode !== 'mes' && (
+          <Box sx={{ px: 3, mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+              <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: T2, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                {viewMode === 'lista' ? 'Progreso de hoy' : 'Progreso de la semana'}
+              </Typography>
+              <Typography sx={{ fontSize: 11.5, color: T2 }}>
+                {viewMode === 'lista'
+                  ? (todayTaskTotal ? `${todayTaskDone}/${todayTaskTotal} · ${todayTaskPct}%` : 'Sin tareas')
+                  : (weekTaskTotal ? `${weekTaskDone}/${weekTaskTotal} · ${weekTaskPct}%` : 'Sin tareas')}
+              </Typography>
+            </Box>
+            <Box sx={{ height: 6, borderRadius: 3, bgcolor: '#EDEEF0', overflow: 'hidden' }}>
+              <Box sx={{ height: '100%', width: `${viewMode === 'lista' ? todayTaskPct : weekTaskPct}%`, bgcolor: GREEN, transition: 'width 0.2s' }} />
+            </Box>
           </Box>
-          <Box sx={{ height: 6, borderRadius: 3, bgcolor: '#EDEEF0', overflow: 'hidden' }}>
-            <Box sx={{ height: '100%', width: `${weekTaskPct}%`, bgcolor: GREEN, transition: 'width 0.2s' }} />
-          </Box>
-        </Box>
+        )}
 
         {viewMode === 'semana' && (
           <>
@@ -621,6 +869,21 @@ export default function Planificador() {
           }}>📌 Tareas fijas{tareasFijas.length > 0 ? ` (${tareasFijas.length})` : ''}</Box>
         </Box>
       </Box>
+
+      {/* Vista Lista — estilo Todoist: una sola columna agrupada por fecha,
+          sin el ruido visual de columnas/tarjetas por día. Vista principal. */}
+      {viewMode === 'lista' && (
+        <Box sx={{ px: 3, pb: 14, maxWidth: 640 }}>
+          {listaGroups.overdue.length > 0 && (
+            <Box sx={{ mb: 1 }}>
+              {listaGroups.overdue.map(k => renderDaySection(k, { accent: '#DC2626' }))}
+            </Box>
+          )}
+          {renderDaySection(today)}
+          {renderDaySection(tomorrowKey)}
+          {listaGroups.rest.map(k => renderDaySection(k))}
+        </Box>
+      )}
 
       {/* Días lado a lado, de izquierda a derecha — scrollea horizontal */}
       {viewMode === 'semana' && (
@@ -943,6 +1206,48 @@ export default function Planificador() {
           </Box>
         )
       })()}
+
+      {/* Quick add flotante — estilo Todoist: tocás el +, escribís algo como
+          "Pagar arriendo mañana" y la fecha se detecta sola (ver
+          parseQuickAdd). El "+" de cada sección de la lista abre lo mismo
+          pero con la fecha fija a esa sección. */}
+      {quickAdd && (
+        <Box onClick={closeQuickAdd} sx={{ position: 'fixed', inset: 0, bgcolor: 'rgba(0,0,0,0.25)', zIndex: 45 }} />
+      )}
+      {quickAdd ? (
+        <Box sx={{ position: 'fixed', left: 16, right: 16, top: '22%', zIndex: 46, maxWidth: 480, mx: 'auto' }}>
+          <Box onClick={e => e.stopPropagation()} sx={{
+            bgcolor: CARD, borderRadius: '16px', boxShadow: '0 12px 32px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`, p: 2,
+          }}>
+            <Box component="input"
+              ref={quickAddInputRef}
+              value={quickAddText}
+              onChange={e => setQuickAddText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') submitQuickAdd(); if (e.key === 'Escape') closeQuickAdd() }}
+              placeholder="Ej: Pagar arriendo mañana"
+              autoFocus
+              sx={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', fontSize: 16, fontFamily: 'inherit', color: T1, py: 0.5 }} />
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1.25 }}>
+              <Typography sx={{ fontSize: 11.5, color: GREEN, fontWeight: 600 }}>
+                📅 {quickAdd.fixedDate
+                  ? sectionLabelFor(quickAdd.fixedDate)
+                  : sectionLabelFor(parseQuickAdd(quickAddText).dateKey)}
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.75 }}>
+                <Box component="button" onClick={closeQuickAdd} sx={{ px: 1.25, py: 0.625, borderRadius: '8px', border: `1px solid ${BORDER}`, bgcolor: 'transparent', color: T2, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cerrar</Box>
+                <Box component="button" onClick={submitQuickAdd} sx={{ px: 1.5, py: 0.625, borderRadius: '8px', border: 'none', bgcolor: GREEN, color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Agregar</Box>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+      ) : (
+        <Box component="button" onClick={() => openQuickAdd(null)} sx={{
+          position: 'fixed', right: 16, bottom: 150, zIndex: 25,
+          width: 56, height: 56, borderRadius: '50%', border: 'none', bgcolor: GREEN, color: '#fff',
+          fontSize: 28, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', boxShadow: '0 6px 20px rgba(0,167,111,0.4)',
+        }}>+</Box>
+      )}
 
       {/* Pomodoro flotante */}
       <Box sx={{ position: 'fixed', right: 16, bottom: 88, zIndex: 20, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
