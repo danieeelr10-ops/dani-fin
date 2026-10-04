@@ -277,13 +277,6 @@ const ALL_TABS = [
     </svg>,
   },
   {
-    path: '/apuntes', label: 'Apuntes',
-    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
-      <line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>
-    </svg>,
-  },
-  {
     path: '/ia', label: 'IA',
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <rect x="4" y="7" width="16" height="13" rx="2"/><path d="M9 2l1.5 3M15 2l-1.5 3"/>
@@ -363,7 +356,7 @@ export default function Layout({ children }) {
   // ── Mobile: bottom nav con drawer "Más" ──────────────────────────────
   const NAV_TABS = ['/inicio', '/finanzas', '/habitos'];
   const moreActive = ALL_TABS.filter(t => !NAV_TABS.includes(t.path) && t.icon).some(t => t.path === pathname)
-    || ['/apuntes', '/ia', '/config'].includes(pathname);
+    || ['/ia', '/config'].includes(pathname);
   const [moreOpen, setMoreOpen] = useState(false);
 
   const tabInicio    = ALL_TABS.find(t => t.path === '/inicio');
@@ -373,7 +366,7 @@ export default function Layout({ children }) {
   // Grupos del drawer "Más" mobile — filtrado por features
   const DRAWER_GROUPS_DEF = [
     { label: 'Organización', items: ['/planificador', '/metas-vida', '/rueda-vida', '/notas'] },
-    { label: 'Más',          items: ['/apuntes', '/ia', '/config'] },
+    { label: 'Más',          items: ['/ia', '/config'] },
     ...(isAdmin ? [{ label: 'Admin', items: ['/admin'] }] : []),
   ];
   // Mostrar todos los items (incluyendo bloqueados) — el filtro es solo para remover paths que no existen
@@ -634,7 +627,7 @@ export default function Layout({ children }) {
 
         {/* Nav */}
         <Box sx={{ flex: 1, pt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.125, overflowY: 'auto' }}>
-          {ALL_TABS.filter(tab => tab.icon && !['/admin', '/config', '/apuntes', '/ia'].includes(tab.path)).map(tab => {
+          {ALL_TABS.filter(tab => tab.icon && !['/admin', '/config', '/ia'].includes(tab.path)).map(tab => {
             const locked = !!(tab.featureKey && !hasFeature(tab.featureKey))
             return (
               <NavItem key={tab.path} tab={tab} active={pathname === tab.path || pathname.startsWith(`${tab.path}/`)}
@@ -663,7 +656,7 @@ export default function Layout({ children }) {
                 <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
               </svg>,
             }}
-            active={moreOpen || ['/apuntes', '/ia', '/config'].includes(pathname)}
+            active={moreOpen || ['/ia', '/config'].includes(pathname)}
             collapsed={collapsed}
             onClick={() => setMoreOpen(o => !o)}
           />

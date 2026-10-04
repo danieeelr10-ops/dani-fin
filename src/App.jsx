@@ -118,7 +118,6 @@ function AuthenticatedApp() {
 
             <Route path="/ia"          element={<IA />} />
             <Route path="/config"       element={<Configuracion />} />
-            <Route path="/apuntes"     element={<Apuntes />} />
             <Route path="/admin"       element={<Admin />} />
             <Route path="/seed"        element={<Seed />} />
           </Routes>
