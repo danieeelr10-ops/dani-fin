@@ -170,6 +170,7 @@ export default function Planificador() {
   const [quickAddFijaDia, setQuickAddFijaDia] = useState(1) // lunes
   const quickAddInputRef = useRef(null)
   const [expandedMonths, setExpandedMonths] = useState({})
+  const [overdueOpen, setOverdueOpen] = useState(false)
 
   function setView(v) { setViewMode(v); ss(VIEW_LS_KEY, v) }
 
@@ -631,6 +632,22 @@ export default function Planificador() {
   function isMonthOpen(mk) { return expandedMonths[mk] !== undefined ? expandedMonths[mk] : mk === todayMonthKey }
   function toggleMonth(mk) { setExpandedMonths(prev => ({ ...prev, [mk]: !isMonthOpen(mk) })) }
 
+  function monthLabelFor(mk) { return capitalize(new Date(`${mk}-01T12:00:00`).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })) }
+
+  // Vencidas también se agrupa por mes (igual que el resto) y arranca
+  // colapsada como un solo bloque — las tareas fijas sin completar se
+  // acumulan semana a semana, así que sin esto la lista de vencidas sola ya
+  // se vuelve larguísima.
+  const overdueByMonth = useMemo(() => {
+    const map = {}
+    for (const k of listaGroups.overdue) {
+      const mk = k.slice(0, 7)
+      ;(map[mk] ||= []).push(k)
+    }
+    return map
+  }, [listaGroups.overdue])
+  const overdueCount = listaGroups.overdue.reduce((s, k) => s + (tasks[k] || []).length, 0)
+
   function sectionLabelFor(dateKey) {
     if (dateKey === today) return 'Hoy'
     if (dateKey === tomorrowKey) return 'Mañana'
@@ -909,8 +926,27 @@ export default function Planificador() {
       {viewMode === 'lista' && (
         <Box sx={{ px: 3, pb: 14, maxWidth: 640 }}>
           {listaGroups.overdue.length > 0 && (
-            <Box sx={{ mb: 1 }}>
-              {listaGroups.overdue.map(k => renderDaySection(k, { accent: '#DC2626' }))}
+            <Box sx={{ mb: 1.5 }}>
+              <Box onClick={() => setOverdueOpen(v => !v)} sx={{
+                display: 'flex', alignItems: 'center', gap: 1, py: 1, px: 0.5, cursor: 'pointer',
+                borderBottom: `1px solid ${BORDER}`,
+              }}>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#DC2626', flex: 1 }}>Vencidas</Typography>
+                <Typography sx={{ fontSize: 11.5, color: T2 }}>{overdueCount} tarea{overdueCount === 1 ? '' : 's'}</Typography>
+                <Typography sx={{ fontSize: 10, color: T2, transform: overdueOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</Typography>
+              </Box>
+              {overdueOpen && (
+                <Box sx={{ pt: 1.25 }}>
+                  {Object.entries(overdueByMonth).map(([mk, keys]) => (
+                    <Box key={mk} sx={{ mb: 1.5 }}>
+                      <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: T2, textTransform: 'uppercase', letterSpacing: '0.04em', mb: 0.75 }}>
+                        {monthLabelFor(mk)}
+                      </Typography>
+                      {keys.map(k => renderDaySection(k, { accent: '#DC2626' }))}
+                    </Box>
+                  ))}
+                </Box>
+              )}
             </Box>
           )}
           {renderDaySection(today)}
@@ -919,7 +955,6 @@ export default function Planificador() {
           {Object.entries(restByMonth).map(([mk, keys]) => {
             const totalTasks = keys.reduce((s, k) => s + (tasks[k] || []).length, 0)
             const doneTasks  = keys.reduce((s, k) => s + (tasks[k] || []).filter(t => t.done).length, 0)
-            const label = capitalize(new Date(`${mk}-01T12:00:00`).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' }))
             const open = isMonthOpen(mk)
             return (
               <Box key={mk} sx={{ mb: 1.5 }}>
@@ -927,7 +962,7 @@ export default function Planificador() {
                   display: 'flex', alignItems: 'center', gap: 1, py: 1, px: 0.5, cursor: 'pointer',
                   borderBottom: `1px solid ${BORDER}`,
                 }}>
-                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: T1, flex: 1 }}>{label}</Typography>
+                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: T1, flex: 1 }}>{monthLabelFor(mk)}</Typography>
                   <Typography sx={{ fontSize: 11.5, color: T2 }}>{totalTasks ? `${doneTasks}/${totalTasks}` : 'Sin tareas'}</Typography>
                   <Typography sx={{ fontSize: 10, color: T2, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</Typography>
                 </Box>
