@@ -22,7 +22,6 @@ export const ALL_FEATURES = {
   habitos:     { label: 'Hábitos',      default: true },
   planificador:{ label: 'Planificador', default: true },
   metasVida:   { label: 'Metas de Vida', default: true },
-  ruedaVida:   { label: 'Rueda de la Vida', default: true },
   notas:       { label: 'Notas',         default: true },
 }
 

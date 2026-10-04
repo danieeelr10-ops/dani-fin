@@ -18,7 +18,6 @@ const RED     = '#DC2626'
 const BORDER  = '#E5E7EB'
 
 function toKey(d) { return d.toLocaleDateString('en-CA') }
-function mesKey(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
 
 function SummaryCard({ icon, title, subtitle, right, color = GREEN, onClick }) {
   return (
@@ -71,13 +70,6 @@ export default function InicioGeneral() {
     ? Math.round(metasVida.reduce((s, m) => s + (m.progreso || 0), 0) / metasVida.length)
     : null
 
-  // Rueda de vida
-  const [ruedaData] = useSyncedState('rumbo_rueda_vida_v1', {})
-  const ruedaMes = ruedaData[mesKey()]
-  const ruedaProm = ruedaMes
-    ? (Object.values(ruedaMes).reduce((s, v) => s + v, 0) / Object.values(ruedaMes).length).toFixed(1)
-    : null
-
   return (
     <Box sx={{ bgcolor: BG, minHeight: '100%' }}>
       <Box sx={{ maxWidth: 600, mx: 'auto' }}>
@@ -115,12 +107,6 @@ export default function InicioGeneral() {
             icon="🎯" title="Metas de Vida" color="#8B5CF6"
             subtitle={metasVida.length === 0 ? 'Sin metas creadas' : `${metasVida.length} meta${metasVida.length !== 1 ? 's' : ''} · ${metasProgreso}% promedio`}
             onClick={() => navigate('/metas-vida')}
-          />
-
-          <SummaryCard
-            icon="🎡" title="Rueda de la Vida" color="#EC4899"
-            subtitle={ruedaProm ? `${ruedaProm}/10 este mes` : 'Sin evaluar este mes'}
-            onClick={() => navigate('/rueda-vida')}
           />
 
         </Box>

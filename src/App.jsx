@@ -35,7 +35,6 @@ import Patrimonio from './pages/Patrimonio';
 import Admin from './pages/Admin';
 import Planificador from './pages/Planificador';
 import MetasVida from './pages/MetasVida';
-import RuedaDeVida from './pages/RuedaDeVida';
 import Notas from './pages/Notas';
 
 function AppRoutes() {
@@ -113,7 +112,6 @@ function AuthenticatedApp() {
             <Route path="/habitos"     element={<Habitos />} />
             <Route path="/planificador"  element={<Planificador />} />
             <Route path="/metas-vida"    element={<MetasVida />} />
-            <Route path="/rueda-vida"    element={<RuedaDeVida />} />
             <Route path="/notas"         element={<Notas />} />
 
             <Route path="/ia"          element={<IA />} />
