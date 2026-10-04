@@ -169,7 +169,7 @@ export default function Planificador() {
   const [quickAddEsFija, setQuickAddEsFija] = useState(false)
   const [quickAddFijaDia, setQuickAddFijaDia] = useState(1) // lunes
   const quickAddInputRef = useRef(null)
-  const [openMonthSheet, setOpenMonthSheet] = useState(null) // monthKey (YYYY-MM) abierto, o null
+  const [openMonth, setOpenMonth] = useState(null) // monthKey (YYYY-MM) abierto, o null (muestra la grilla)
 
   function setView(v) { setViewMode(v); ss(VIEW_LS_KEY, v) }
 
@@ -909,18 +909,34 @@ export default function Planificador() {
         </Box>
       </Box>
 
-      {/* Vista Lista — estilo Todoist: Hoy/Mañana siempre a la vista, y todo
-          lo demás como tarjetas por mes (no hay que bajar para verlo) — tocar
-          una tarjeta abre ese mes completo en una hoja aparte. */}
+      {/* Vista Lista — estilo Todoist: Hoy/Mañana siempre a la vista. El resto
+          son tarjetas por mes; tocar una tarjeta abre ese mes ahí mismo (no en
+          una ventana flotante aparte) con un botón para volver a la grilla. */}
       {viewMode === 'lista' && (
         <Box sx={{ px: 3, pb: 14, maxWidth: 640 }}>
           {renderDaySection(today)}
           {renderDaySection(tomorrowKey)}
 
-          {monthCards.length > 0 && (
+          {openMonth ? (() => {
+            const card = monthCards.find(c => c.mk === openMonth)
+            if (!card) return null
+            return (
+              <Box>
+                <Box onClick={() => setOpenMonth(null)} sx={{
+                  display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer', color: T2,
+                  mb: 1.5, fontSize: 13, fontWeight: 600, '&:hover': { color: T1 },
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3"><polyline points="15 18 9 12 15 6"/></svg>
+                  Meses
+                </Box>
+                <Typography sx={{ fontSize: 16, fontWeight: 700, color: T1, mb: 1.5 }}>{monthLabelFor(openMonth)}</Typography>
+                {card.keys.map(k => renderDaySection(k, { accent: k < today ? '#DC2626' : undefined }))}
+              </Box>
+            )
+          })() : monthCards.length > 0 && (
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 1, mt: 0.5 }}>
               {monthCards.map(({ mk, total, done, hasOverdue }) => (
-                <Box key={mk} onClick={() => setOpenMonthSheet(mk)} sx={{
+                <Box key={mk} onClick={() => setOpenMonth(mk)} sx={{
                   bgcolor: CARD, borderRadius: '12px', border: `1px solid ${hasOverdue ? alpha('#DC2626', 0.3) : BORDER}`,
                   boxShadow: CARD_SH, p: 1.5, cursor: 'pointer',
                 }}>
@@ -939,26 +955,6 @@ export default function Planificador() {
           )}
         </Box>
       )}
-
-      {/* Hoja: mes completo abierto desde una tarjeta de la vista Lista */}
-      {openMonthSheet && (() => {
-        const card = monthCards.find(c => c.mk === openMonthSheet)
-        if (!card) return null
-        return (
-          <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'rgba(0,0,0,0.4)', zIndex: 40, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={() => setOpenMonthSheet(null)}>
-            <Box onClick={e => e.stopPropagation()} sx={{
-              bgcolor: BG, width: '100%', maxWidth: 600, maxHeight: '85vh', overflowY: 'auto',
-              borderRadius: '20px 20px 0 0', p: 2.5, pb: 4,
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                <Typography sx={{ fontSize: 16, fontWeight: 700, color: T1 }}>{monthLabelFor(openMonthSheet)}</Typography>
-                <Box component="button" onClick={() => setOpenMonthSheet(null)} sx={{ width: 28, height: 28, borderRadius: '50%', border: `1px solid ${BORDER}`, bgcolor: CARD, cursor: 'pointer', fontSize: 13 }}>✕</Box>
-              </Box>
-              {card.keys.map(k => renderDaySection(k, { accent: k < today ? '#DC2626' : undefined }))}
-            </Box>
-          </Box>
-        )
-      })()}
 
       {/* Días lado a lado, de izquierda a derecha — scrollea horizontal */}
       {viewMode === 'semana' && (
