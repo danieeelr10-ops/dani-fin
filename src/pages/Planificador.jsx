@@ -169,8 +169,7 @@ export default function Planificador() {
   const [quickAddEsFija, setQuickAddEsFija] = useState(false)
   const [quickAddFijaDia, setQuickAddFijaDia] = useState(1) // lunes
   const quickAddInputRef = useRef(null)
-  const [expandedMonths, setExpandedMonths] = useState({})
-  const [overdueOpen, setOverdueOpen] = useState(false)
+  const [openMonthSheet, setOpenMonthSheet] = useState(null) // monthKey (YYYY-MM) abierto, o null
 
   function setView(v) { setViewMode(v); ss(VIEW_LS_KEY, v) }
 
@@ -616,37 +615,26 @@ export default function Planificador() {
     }
   }, [tasks, today, tomorrowKey])
 
-  // Lo que no es Hoy/Mañana se agrupa por mes y arranca colapsado — con
-  // tareas fijas poblando muchos días por delante, una lista plana de
-  // encabezados por día se volvía interminable. El mes actual arranca
-  // abierto (lo más relevante); el resto colapsado hasta que lo tocás.
-  const restByMonth = useMemo(() => {
-    const map = {}
-    for (const k of listaGroups.rest) {
-      const mk = k.slice(0, 7)
-      ;(map[mk] ||= []).push(k)
-    }
-    return map
-  }, [listaGroups.rest])
-  const todayMonthKey = today.slice(0, 7)
-  function isMonthOpen(mk) { return expandedMonths[mk] !== undefined ? expandedMonths[mk] : mk === todayMonthKey }
-  function toggleMonth(mk) { setExpandedMonths(prev => ({ ...prev, [mk]: !isMonthOpen(mk) })) }
-
   function monthLabelFor(mk) { return capitalize(new Date(`${mk}-01T12:00:00`).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })) }
 
-  // Vencidas también se agrupa por mes (igual que el resto) y arranca
-  // colapsada como un solo bloque — las tareas fijas sin completar se
-  // acumulan semana a semana, así que sin esto la lista de vencidas sola ya
-  // se vuelve larguísima.
-  const overdueByMonth = useMemo(() => {
+  // Todo lo que no es Hoy/Mañana (vencidas y futuro por igual) se agrupa por
+  // mes como tarjetas — ver todo el detalle día a día requeriría bajar
+  // demasiado, así que acá solo se ve un vistazo (mes, cuántas tareas, si
+  // hay vencidas) y tocar la tarjeta abre ese mes completo en una hoja aparte.
+  const monthCards = useMemo(() => {
     const map = {}
-    for (const k of listaGroups.overdue) {
+    for (const k of [...listaGroups.overdue, ...listaGroups.rest]) {
       const mk = k.slice(0, 7)
       ;(map[mk] ||= []).push(k)
     }
-    return map
-  }, [listaGroups.overdue])
-  const overdueCount = listaGroups.overdue.reduce((s, k) => s + (tasks[k] || []).length, 0)
+    return Object.keys(map).sort().map(mk => {
+      const keys = map[mk].sort()
+      const total = keys.reduce((s, k) => s + (tasks[k] || []).length, 0)
+      const done  = keys.reduce((s, k) => s + (tasks[k] || []).filter(t => t.done).length, 0)
+      const hasOverdue = keys.some(k => k < today && (tasks[k] || []).some(t => !t.done))
+      return { mk, keys, total, done, hasOverdue }
+    })
+  }, [listaGroups.overdue, listaGroups.rest, tasks, today])
 
   function sectionLabelFor(dateKey) {
     if (dateKey === today) return 'Hoy'
@@ -921,57 +909,56 @@ export default function Planificador() {
         </Box>
       </Box>
 
-      {/* Vista Lista — estilo Todoist: una sola columna agrupada por fecha,
-          sin el ruido visual de columnas/tarjetas por día. Vista principal. */}
+      {/* Vista Lista — estilo Todoist: Hoy/Mañana siempre a la vista, y todo
+          lo demás como tarjetas por mes (no hay que bajar para verlo) — tocar
+          una tarjeta abre ese mes completo en una hoja aparte. */}
       {viewMode === 'lista' && (
         <Box sx={{ px: 3, pb: 14, maxWidth: 640 }}>
-          {listaGroups.overdue.length > 0 && (
-            <Box sx={{ mb: 1.5 }}>
-              <Box onClick={() => setOverdueOpen(v => !v)} sx={{
-                display: 'flex', alignItems: 'center', gap: 1, py: 1, px: 0.5, cursor: 'pointer',
-                borderBottom: `1px solid ${BORDER}`,
-              }}>
-                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#DC2626', flex: 1 }}>Vencidas</Typography>
-                <Typography sx={{ fontSize: 11.5, color: T2 }}>{overdueCount} tarea{overdueCount === 1 ? '' : 's'}</Typography>
-                <Typography sx={{ fontSize: 10, color: T2, transform: overdueOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</Typography>
-              </Box>
-              {overdueOpen && (
-                <Box sx={{ pt: 1.25 }}>
-                  {Object.entries(overdueByMonth).map(([mk, keys]) => (
-                    <Box key={mk} sx={{ mb: 1.5 }}>
-                      <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: T2, textTransform: 'uppercase', letterSpacing: '0.04em', mb: 0.75 }}>
-                        {monthLabelFor(mk)}
-                      </Typography>
-                      {keys.map(k => renderDaySection(k, { accent: '#DC2626' }))}
-                    </Box>
-                  ))}
-                </Box>
-              )}
-            </Box>
-          )}
           {renderDaySection(today)}
           {renderDaySection(tomorrowKey)}
 
-          {Object.entries(restByMonth).map(([mk, keys]) => {
-            const totalTasks = keys.reduce((s, k) => s + (tasks[k] || []).length, 0)
-            const doneTasks  = keys.reduce((s, k) => s + (tasks[k] || []).filter(t => t.done).length, 0)
-            const open = isMonthOpen(mk)
-            return (
-              <Box key={mk} sx={{ mb: 1.5 }}>
-                <Box onClick={() => toggleMonth(mk)} sx={{
-                  display: 'flex', alignItems: 'center', gap: 1, py: 1, px: 0.5, cursor: 'pointer',
-                  borderBottom: `1px solid ${BORDER}`,
+          {monthCards.length > 0 && (
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 1, mt: 0.5 }}>
+              {monthCards.map(({ mk, total, done, hasOverdue }) => (
+                <Box key={mk} onClick={() => setOpenMonthSheet(mk)} sx={{
+                  bgcolor: CARD, borderRadius: '12px', border: `1px solid ${hasOverdue ? alpha('#DC2626', 0.3) : BORDER}`,
+                  boxShadow: CARD_SH, p: 1.5, cursor: 'pointer',
                 }}>
-                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: T1, flex: 1 }}>{monthLabelFor(mk)}</Typography>
-                  <Typography sx={{ fontSize: 11.5, color: T2 }}>{totalTasks ? `${doneTasks}/${totalTasks}` : 'Sin tareas'}</Typography>
-                  <Typography sx={{ fontSize: 10, color: T2, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</Typography>
+                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: T1 }}>{monthLabelFor(mk)}</Typography>
+                  <Typography sx={{ fontSize: 11.5, color: hasOverdue ? '#DC2626' : T2, mt: 0.25 }}>
+                    {total} tarea{total === 1 ? '' : 's'}{hasOverdue ? ' · vencidas' : ''}
+                  </Typography>
+                  {total > 0 && (
+                    <Box sx={{ height: 4, borderRadius: 2, bgcolor: '#EDEEF0', overflow: 'hidden', mt: 0.75 }}>
+                      <Box sx={{ height: '100%', width: `${Math.round(done / total * 100)}%`, bgcolor: GREEN }} />
+                    </Box>
+                  )}
                 </Box>
-                {open && <Box sx={{ pt: 1.25 }}>{keys.map(k => renderDaySection(k))}</Box>}
-              </Box>
-            )
-          })}
+              ))}
+            </Box>
+          )}
         </Box>
       )}
+
+      {/* Hoja: mes completo abierto desde una tarjeta de la vista Lista */}
+      {openMonthSheet && (() => {
+        const card = monthCards.find(c => c.mk === openMonthSheet)
+        if (!card) return null
+        return (
+          <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'rgba(0,0,0,0.4)', zIndex: 40, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={() => setOpenMonthSheet(null)}>
+            <Box onClick={e => e.stopPropagation()} sx={{
+              bgcolor: BG, width: '100%', maxWidth: 600, maxHeight: '85vh', overflowY: 'auto',
+              borderRadius: '20px 20px 0 0', p: 2.5, pb: 4,
+            }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Typography sx={{ fontSize: 16, fontWeight: 700, color: T1 }}>{monthLabelFor(openMonthSheet)}</Typography>
+                <Box component="button" onClick={() => setOpenMonthSheet(null)} sx={{ width: 28, height: 28, borderRadius: '50%', border: `1px solid ${BORDER}`, bgcolor: CARD, cursor: 'pointer', fontSize: 13 }}>✕</Box>
+              </Box>
+              {card.keys.map(k => renderDaySection(k, { accent: k < today ? '#DC2626' : undefined }))}
+            </Box>
+          </Box>
+        )
+      })()}
 
       {/* Días lado a lado, de izquierda a derecha — scrollea horizontal */}
       {viewMode === 'semana' && (
