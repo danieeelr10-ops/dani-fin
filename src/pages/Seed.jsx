@@ -39,7 +39,7 @@ export default function Seed() {
     };
 
     localStorage.setItem('dani_fin_v2', JSON.stringify(state));
-    setTimeout(() => navigate('/registro', { replace: true }), 800);
+    setTimeout(() => navigate('/finanzas/registro', { replace: true }), 800);
   }, []);
 
   return (

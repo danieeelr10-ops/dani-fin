@@ -3,6 +3,18 @@ import { Box, Typography, alpha } from '@mui/material';
 import { useFinanzas } from 'src/context/FinanzasContext';
 import { getMesActual, formatMoney } from 'src/utils/format';
 
+function dateToMes(dateStr) {
+  return 'M' + parseInt(dateStr.split('-')[1], 10);
+}
+function getMesParaTC(fechaStr, tarjetaObj) {
+  const corte = tarjetaObj?.fechaCorte != null ? parseInt(tarjetaObj.fechaCorte, 10) : 0;
+  if (!corte || corte < 1) return dateToMes(fechaStr);
+  const parts = fechaStr.split('-');
+  const month = parseInt(parts[1], 10);
+  const day   = parseInt(parts[2], 10);
+  return day > corte ? 'M' + (month === 12 ? 1 : month + 1) : 'M' + month;
+}
+
 // ── Constantes de diseño ──────────────────────────────────────
 const BG      = '#F7F7F8'
 const CARD    = '#FFFFFF'
@@ -105,19 +117,21 @@ export default function Mercado() {
   function confirmar() {
     const selected = items.filter(it => checked.includes(it.id));
     if (!selected.length) return;
-    const mes = getMesActual();
     const now = new Date().toISOString();
+    const fechaStr = now.split('T')[0];
     const batchId = Date.now();
+
+    // Si la cuenta elegida es una tarjeta de crédito, resolver mes con fechaCorte
+    const esTarjeta    = (state.tarjetas || []).some(t => t.nombre === cuenta)
+    const cuentaFinal  = esTarjeta ? 'T.C' : cuenta
+    const tarjetaFinal = esTarjeta ? cuenta : (cuenta === 'T.C' && tarjeta ? tarjeta : undefined)
+    const tcObj        = tarjetaFinal ? (state.tarjetas || []).find(t => t.nombre === tarjetaFinal) : null
+    const mes          = (cuentaFinal === 'T.C' && tcObj) ? getMesParaTC(fechaStr, tcObj) : getMesActual()
 
     const mercadoItems = selected.map((it, i) => ({
       id: batchId + i, nombre: it.nombre, precio: parsePrecio(it.precio),
       cantidad: parseInt(it.cantidad, 10) || 1, fecha: now, mes,
     }));
-
-    // Si la cuenta elegida es una tarjeta de crédito, guardar como T.C + tarjeta
-    const esTarjeta = (state.tarjetas || []).some(t => t.nombre === cuenta)
-    const cuentaFinal  = esTarjeta ? 'T.C' : cuenta
-    const tarjetaFinal = esTarjeta ? cuenta : (cuenta === 'T.C' && tarjeta ? tarjeta : undefined)
 
     const transacciones = selected.map((it, i) => ({
       id: batchId + selected.length + i, concepto: it.nombre,

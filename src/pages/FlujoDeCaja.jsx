@@ -197,7 +197,7 @@ export default function FlujoDeCaja() {
           {porCobrar.pendientes.length === 0 ? (
             <Box sx={{ bgcolor: CARD, borderRadius: '12px', boxShadow: CARD_SH, p: 2.5, textAlign: 'center', border: `1px solid ${BORDER}` }}>
               <Typography sx={{ fontSize: 14, color: T2, mb: 0.5 }}>Sin cobros pendientes</Typography>
-              <Box onClick={() => navigate('/registro')} sx={{ display: 'inline-flex', cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
+              <Box onClick={() => navigate('/finanzas/registro')} sx={{ display: 'inline-flex', cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
                 <Typography sx={{ fontSize: 13, fontWeight: 500, color: GREEN }}>Registrar cobro →</Typography>
               </Box>
             </Box>
@@ -242,7 +242,7 @@ export default function FlujoDeCaja() {
           {pagos30.items.length === 0 ? (
             <Box sx={{ bgcolor: CARD, borderRadius: '12px', boxShadow: CARD_SH, p: 2.5, textAlign: 'center', border: `1px solid ${BORDER}` }}>
               <Typography sx={{ fontSize: 14, color: T2, mb: 0.5 }}>Sin pagos programados</Typography>
-              <Box onClick={() => navigate('/registro')} sx={{ display: 'inline-flex', cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
+              <Box onClick={() => navigate('/finanzas/registro')} sx={{ display: 'inline-flex', cursor: 'pointer', '&:active': { opacity: 0.6 } }}>
                 <Typography sx={{ fontSize: 13, fontWeight: 500, color: T2 }}>Registrar pago programado →</Typography>
               </Box>
             </Box>
@@ -281,7 +281,7 @@ export default function FlujoDeCaja() {
         </Box>
 
         {/* CTA registrar */}
-        <Box onClick={() => navigate('/registro')} sx={{
+        <Box onClick={() => navigate('/finanzas/registro')} sx={{
           bgcolor: CARD, borderRadius: '12px', boxShadow: CARD_SH,
           border: `1px solid ${BORDER}`, p: 2,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
