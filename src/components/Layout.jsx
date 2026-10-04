@@ -270,9 +270,27 @@ const ALL_TABS = [
   // Accesibles por URL pero no en nav principal — Config/Apuntes/IA no son
   // uno de los 7 módulos principales de Rumbo; todo lo financiero ahora
   // vive dentro de /finanzas con pestañas internas (ver FinanzasLayout.jsx).
-  { path: '/config',   label: 'Config',   icon: null },
-  { path: '/apuntes',  label: 'Apuntes',  icon: null },
-  { path: '/ia',       label: 'IA',       icon: null },
+  {
+    path: '/config', label: 'Config',
+    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+    </svg>,
+  },
+  {
+    path: '/apuntes', label: 'Apuntes',
+    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+      <line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>
+    </svg>,
+  },
+  {
+    path: '/ia', label: 'IA',
+    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="4" y="7" width="16" height="13" rx="2"/><path d="M9 2l1.5 3M15 2l-1.5 3"/>
+      <circle cx="9" cy="13" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="13" r="1.3" fill="currentColor" stroke="none"/>
+      <line x1="9" y1="17" x2="15" y2="17"/>
+    </svg>,
+  },
 ];
 
 function NavItem({ tab, active, collapsed, onClick, locked }) {
@@ -363,6 +381,10 @@ export default function Layout({ children }) {
     ...g,
     items: g.items.filter(path => ALL_TABS.find(t => t.path === path)),
   })).filter(g => g.items.length > 0);
+  // En PC, "Organización" y "Admin" ya se ven directo en el sidebar — el
+  // menú "Más" de PC solo necesita lo que ahí no aparece (Apuntes/IA/Config),
+  // para no duplicar entradas.
+  const DRAWER_GROUPS_DESKTOP = DRAWER_GROUPS.filter(g => g.label === 'Más');
 
   function goTo(path) { navigate(path); setMoreOpen(false); }
 
@@ -612,7 +634,7 @@ export default function Layout({ children }) {
 
         {/* Nav */}
         <Box sx={{ flex: 1, pt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.125, overflowY: 'auto' }}>
-          {ALL_TABS.filter(tab => tab.icon && tab.path !== '/admin').map(tab => {
+          {ALL_TABS.filter(tab => tab.icon && !['/admin', '/config', '/apuntes', '/ia'].includes(tab.path)).map(tab => {
             const locked = !!(tab.featureKey && !hasFeature(tab.featureKey))
             return (
               <NavItem key={tab.path} tab={tab} active={pathname === tab.path || pathname.startsWith(`${tab.path}/`)}
@@ -632,7 +654,91 @@ export default function Layout({ children }) {
               onClick={() => navigate('/admin')}
             />
           )}
+          {/* Más — mismo destino que el "Más" de mobile (Apuntes/IA/Config),
+              para que esos items sean alcanzables sin escribir la URL a mano. */}
+          <NavItem
+            tab={{
+              path: '__more__', label: 'Más',
+              icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>,
+            }}
+            active={moreOpen || ['/apuntes', '/ia', '/config'].includes(pathname)}
+            collapsed={collapsed}
+            onClick={() => setMoreOpen(o => !o)}
+          />
         </Box>
+
+        {/* Panel "Más" — mismo contenido/estilo que el drawer de mobile */}
+        {moreOpen && (
+          <>
+            <Box onClick={() => setMoreOpen(false)} sx={{ position: 'fixed', inset: 0, zIndex: 300, bgcolor: 'rgba(0,0,0,0.5)' }} />
+            <Box sx={{
+              position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 301,
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px 20px 0 0',
+              boxShadow: '0 -8px 32px rgba(0,0,0,0.14)',
+              pb: 3,
+              maxWidth: 480, mx: 'auto',
+              maxHeight: '85dvh',
+              overflowY: 'auto',
+            }}>
+              <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1.25, pb: 1 }}>
+                <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'rgba(145,158,171,0.3)' }} />
+              </Box>
+              <Box sx={{ px: 2, pb: 1.5 }}>
+                {DRAWER_GROUPS_DESKTOP.map(group => {
+                  const groupTabs = group.items
+                    .map(path => ALL_TABS.find(t => t.path === path))
+                    .filter(Boolean);
+                  if (groupTabs.length === 0) return null;
+                  return (
+                    <Box key={group.label} sx={{ mb: 2 }}>
+                      <Typography sx={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.07em', mb: 1.25, px: 0.5 }}>
+                        {group.label}
+                      </Typography>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0.75 }}>
+                        {groupTabs.map(tab => {
+                          const active = pathname === tab.path;
+                          const locked = !!(tab.featureKey && !hasFeature(tab.featureKey));
+                          return (
+                            <Box key={tab.path} onClick={locked ? undefined : () => goTo(tab.path)} sx={{
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.625,
+                              py: 1.25, px: 0.5, borderRadius: '12px',
+                              cursor: locked ? 'default' : 'pointer',
+                              opacity: locked ? 0.45 : 1,
+                              bgcolor: active ? 'rgba(0,167,111,0.08)' : '#F9FAFB',
+                              border: '1px solid', borderColor: active ? 'rgba(0,167,111,0.25)' : '#F3F4F6',
+                              '&:hover': locked ? {} : { bgcolor: active ? 'rgba(0,167,111,0.12)' : '#F3F4F6' },
+                            }}>
+                              <Box sx={{
+                                width: 40, height: 40, borderRadius: '10px',
+                                bgcolor: active ? 'rgba(0,167,111,0.12)' : '#fff',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: active ? '#00A76F' : '#6B7280',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
+                              }}>
+                                {tab.icon}
+                              </Box>
+                              <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+                                <Typography sx={{ fontSize: 10, fontWeight: active ? 700 : 500, color: active ? '#00A76F' : '#374151', textAlign: 'center', lineHeight: 1.2 }}>
+                                  {tab.label}
+                                </Typography>
+                                {locked && (
+                                  <Box sx={{ position: 'absolute', left: 0, right: 0, top: '50%', height: '1.5px', bgcolor: '#9CA3AF', transform: 'translateY(-50%)' }} />
+                                )}
+                              </Box>
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+            </Box>
+          </>
+        )}
 
         <Divider />
         <Box sx={{ p: collapsed ? 1.25 : 1.75, display: 'flex', alignItems: 'center', gap: 1.25, justifyContent: collapsed ? 'center' : 'flex-start' }}>
