@@ -631,6 +631,63 @@ function migrarInversionesLocalStorage(s) {
   };
 }
 
+// Migración: recalcula cierres mensuales guardados con la fórmula antigua de
+// closeMonth(), que contaba ingresos pendientes de cobro como si ya estuvieran
+// recibidos. Esa plata se duplicaba: una vez en el saldo trasladado y otra vez
+// cuando la transacción (movida al mes siguiente) se cobraba de verdad.
+// Recalcula con solo ingresos ya cobrados (m.ingRecibidos - m.egCash).
+function fixCierresIngresosPendientes(s) {
+  const FLAG = 'fix_cierres_carry_over_v2';
+  try { if (localStorage.getItem(FLAG)) return { state: s, changed: false }; } catch(e) {}
+  try { localStorage.setItem(FLAG, '1'); } catch(e) {}
+
+  const cierres = s.cierresMensuales || {};
+  const mesesCerrados = Object.keys(cierres).sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)));
+  if (mesesCerrados.length === 0) return { state: s, changed: false };
+
+  let changed = false;
+  const fixed = { ...cierres };
+
+  mesesCerrados.forEach((mes, i) => {
+    const mesNum   = parseInt(mes.replace('M', ''));
+    const prevMes  = `M${mesNum - 1}`;
+    // Misma regla que getCarryOver(): hereda del mes inmediatamente anterior
+    // SOLO si ese mes también está cerrado; si hay un hueco, arranca en 0.
+    const carryEntrante = i > 0 && mesesCerrados[i - 1] === prevMes
+      ? fixed[prevMes].carry_over_amount
+      : 0;
+
+    const m = computeMetrics(s.transacciones || [], mes);
+    const balanceMes  = m.ingRecibidos - m.egCash;
+    const nuevoCarry  = carryEntrante + balanceMes;
+
+    const anterior = fixed[mes];
+    const guardado = anterior.carry_over_amount ?? anterior.closing_balance ?? 0;
+    if (Math.abs(nuevoCarry - guardado) > 1 || Math.abs((anterior.closing_balance ?? 0) - balanceMes) > 1) {
+      changed = true;
+    }
+    fixed[mes] = { ...anterior, total_income: m.ingRecibidos, closing_balance: balanceMes, carry_over_amount: nuevoCarry };
+  });
+
+  if (!changed) return { state: s, changed: false };
+  return { state: { ...s, cierresMensuales: fixed }, changed: true };
+}
+
+// Migración: convierte los pagos de "Club" (antes hardcodeados en apuntes.pagosClub)
+// en la primera cuenta externa del nuevo sistema genérico de Apuntes.
+function migrarClubACuentaExterna(s) {
+  const FLAG = 'migrar_club_cuenta_externa_v1';
+  try { if (localStorage.getItem(FLAG)) return { state: s, changed: false }; } catch(e) {}
+  try { localStorage.setItem(FLAG, '1'); } catch(e) {}
+
+  const pagosClub = s.apuntes?.pagosClub || [];
+  if (pagosClub.length === 0) return { state: s, changed: false };
+  if ((s.cuentasExternas || []).some(c => c.nombre === 'Club')) return { state: s, changed: false };
+
+  const cuentaClub = { id: Date.now(), nombre: 'Club', emoji: '⚽', pagos: pagosClub };
+  return { state: { ...s, cuentasExternas: [cuentaClub, ...(s.cuentasExternas || [])] }, changed: true };
+}
+
 // Seed: agrega cierres mensuales de prueba si no hay ninguno (solo en local/dev)
 function seedCierresPrueba(s) {
   const FLAG = 'seed_cierres_prueba_v1';
@@ -669,7 +726,9 @@ export function FinanzasProvider({ children }) {
       const { state: s1, changed: c1 } = fixIngresosFijos(prev);
       const { state: s2, changed: c2 } = migrateMercadoOrphans(s1);
       const { state: s2b, changed: c2b } = addTarjetaNu(s2);
-      const { state: s2e, changed: c2e } = migrarInversionesLocalStorage(s2b);
+      const { state: s2c, changed: c2c } = fixCierresIngresosPendientes(s2b);
+      const { state: s2d, changed: c2d } = migrarClubACuentaExterna(s2c);
+      const { state: s2e, changed: c2e } = migrarInversionesLocalStorage(s2d);
 
       // Seeds solo en desarrollo local Y solo si ya hay transacciones previas (cuenta de Dani)
       const esUsuarioExistente = (s2e.transacciones || []).length > 0;
@@ -678,12 +737,13 @@ export function FinanzasProvider({ children }) {
       const { state: s5, changed: c5 } = IS_DEV && esUsuarioExistente ? seedLocal2026(s4)      : { state: s4,  changed: false };
       const { state: s6, changed: c6 } = IS_DEV && esUsuarioExistente ? seedCierresPrueba(s5)  : { state: s5,  changed: false };
 
-      if (!c1 && !c2 && !c2b && !c2e && !c3 && !c4 && !c5 && !c6) return prev;
-      // Si migrarInversionesLocalStorage subió datos, es una corrección real de
-      // datos (no solo housekeeping): actualiza lastModified para que este
+      if (!c1 && !c2 && !c2b && !c2c && !c2d && !c2e && !c3 && !c4 && !c5 && !c6) return prev;
+      // Si fixCierresIngresosPendientes, migrarClubACuentaExterna o
+      // migrarInversionesLocalStorage corrigieron algo, es una corrección real
+      // de datos (no solo housekeeping): actualiza lastModified para que este
       // dispositivo gane la comparación de sync remoto y empuje a la nube en
       // vez de arriesgarse a que un pull remoto lo pise de vuelta a vacío.
-      const finalState = c2e ? { ...s6, lastModified: Date.now() } : s6;
+      const finalState = (c2c || c2d || c2e) ? { ...s6, lastModified: Date.now() } : s6;
       persistLocal(finalState);
       // NO escribir a Supabase aquí (salvo el caso de arriba): el sync remoto
       // (useEffect siguiente) compara timestamps y decide qué fuente es la más
@@ -1129,10 +1189,15 @@ export function FinanzasProvider({ children }) {
   function closeMonth(mes) {
     update(prev => {
       const m = computeMetrics(prev.transacciones || [], mes);
-      const balance = m.neto;
+      // Solo dinero realmente cobrado — los ingresos pendientes/futuros se mueven
+      // al mes siguiente más abajo, así que no pueden contarse también aquí
+      // (si no, quedan duplicados: una vez en el traslado, otra al cobrarse).
+      const balance = m.ingRecibidos - m.egCash;
 
-      // Carry over positivo = ahorro trasladado, negativo = deuda trasladada
-      const carry_over = balance;
+      // El saldo trasladado se ACUMULA sobre lo que este mes ya traía (deuda o
+      // ahorro de meses anteriores) — si no, ese saldo previo desaparece cada
+      // vez que se cierra un mes, en vez de arrastrarse mes a mes.
+      const carry_over = getCarryOver(mes) + balance;
 
       // Cobros pendientes del mes → mover al siguiente mes
       const mesNum     = parseInt(mes.replace('M', ''));
@@ -1158,7 +1223,7 @@ export function FinanzasProvider({ children }) {
       const cierre = {
         mes,
         year,
-        total_income:      m.ing,
+        total_income:      m.ingRecibidos,
         total_expenses:    m.egCash,
         closing_balance:   balance,
         carry_over_amount: carry_over,
@@ -1219,33 +1284,57 @@ export function FinanzasProvider({ children }) {
     update(prev => ({ ...prev, metasPersonalizadas: (prev.metasPersonalizadas || []).filter(m => m.id !== id) }));
   }
 
-  function addPagoClub(pago) {
+  // ── Cuentas externas (Apuntes tipo blog) ──────────────────────
+  // Cada cuenta es un tracker independiente (Club, Sports Manage, etc.) con
+  // su propia lista de pagos/reportes — pensado para contabilidad externa al
+  // uso financiero personal del resto de la app. Reemplaza al viejo sistema
+  // hardcodeado de "pagosClub" (migrarClubACuentaExterna convierte los datos
+  // existentes una sola vez).
+  function addCuentaExterna({ nombre, emoji }) {
     update(prev => ({
       ...prev,
-      apuntes: {
-        ...prev.apuntes,
-        pagosClub: [{ ...pago, id: Date.now(), reportado: false }, ...(prev.apuntes?.pagosClub || [])],
-      },
+      cuentasExternas: [...(prev.cuentasExternas || []), { id: Date.now(), nombre: nombre.trim(), emoji: emoji || '📁', pagos: [] }],
     }));
   }
 
-  function togglePagoClub(id) {
+  function updateCuentaExterna(id, changes) {
     update(prev => ({
       ...prev,
-      apuntes: {
-        ...prev.apuntes,
-        pagosClub: (prev.apuntes?.pagosClub || []).map(p => p.id === id ? { ...p, reportado: !p.reportado } : p),
-      },
+      cuentasExternas: (prev.cuentasExternas || []).map(c => c.id === id ? { ...c, ...changes } : c),
     }));
   }
 
-  function deletePagoClub(id) {
+  function deleteCuentaExterna(id) {
     update(prev => ({
       ...prev,
-      apuntes: {
-        ...prev.apuntes,
-        pagosClub: (prev.apuntes?.pagosClub || []).filter(p => p.id !== id),
-      },
+      cuentasExternas: (prev.cuentasExternas || []).filter(c => c.id !== id),
+    }));
+  }
+
+  function addPagoExterno(cuentaId, pago) {
+    update(prev => ({
+      ...prev,
+      cuentasExternas: (prev.cuentasExternas || []).map(c =>
+        c.id === cuentaId ? { ...c, pagos: [{ ...pago, id: Date.now(), reportado: false }, ...(c.pagos || [])] } : c
+      ),
+    }));
+  }
+
+  function togglePagoExterno(cuentaId, pagoId) {
+    update(prev => ({
+      ...prev,
+      cuentasExternas: (prev.cuentasExternas || []).map(c =>
+        c.id === cuentaId ? { ...c, pagos: (c.pagos || []).map(p => p.id === pagoId ? { ...p, reportado: !p.reportado } : p) } : c
+      ),
+    }));
+  }
+
+  function deletePagoExterno(cuentaId, pagoId) {
+    update(prev => ({
+      ...prev,
+      cuentasExternas: (prev.cuentasExternas || []).map(c =>
+        c.id === cuentaId ? { ...c, pagos: (c.pagos || []).filter(p => p.id !== pagoId) } : c
+      ),
     }));
   }
 
@@ -1371,7 +1460,8 @@ export function FinanzasProvider({ children }) {
       savePerfilIngresos, saveNombreUsuario,
       addMetaPersonalizada, updateMetaPersonalizada, deleteMetaPersonalizada,
       addDeuda, deleteDeuda, addAbono, deleteAbono,
-      addPagoClub, togglePagoClub, deletePagoClub,
+      addCuentaExterna, updateCuentaExterna, deleteCuentaExterna,
+      addPagoExterno, togglePagoExterno, deletePagoExterno,
       addNota, deleteNota,
     }}>
       {children}
