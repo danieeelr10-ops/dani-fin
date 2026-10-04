@@ -167,6 +167,7 @@ export default function Planificador() {
   const [quickAddDate, setQuickAddDate] = useState('')
   const [quickAddDateTouched, setQuickAddDateTouched] = useState(false)
   const [quickAddEsFija, setQuickAddEsFija] = useState(false)
+  const [quickAddWeekPick, setQuickAddWeekPick] = useState(false)
   const [quickAddFijaDia, setQuickAddFijaDia] = useState(1) // lunes
   const quickAddInputRef = useRef(null)
   const [openMonth, setOpenMonth] = useState(null) // monthKey (YYYY-MM) abierto, o null (muestra la grilla)
@@ -429,6 +430,7 @@ export default function Planificador() {
     setQuickAddDate(initDate)
     setQuickAddDateTouched(!!fixedDate)
     setQuickAddEsFija(false)
+    setQuickAddWeekPick(false)
     setQuickAddFijaDia(new Date(`${initDate}T12:00:00`).getDay())
     setTimeout(() => quickAddInputRef.current?.focus(), 50)
   }
@@ -1326,11 +1328,53 @@ export default function Planificador() {
                   }}>{DIA_LETRAS[i]}</Box>
                 ))}
               </Box>
-            ) : (
-              <Box component="input" type="date" value={quickAddDate}
-                onChange={e => { setQuickAddDate(e.target.value); setQuickAddDateTouched(true) }}
-                sx={{ mb: 1.25, border: `1px solid ${BORDER}`, borderRadius: '8px', px: 1.25, py: 0.625, fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', bgcolor: '#fff' }} />
-            )}
+            ) : (() => {
+              // Semana actual de verdad (no la que esté navegada en la vista
+              // Semana) — para que "Esta semana" siempre sea la de hoy.
+              const thisWeekStart = startOfWeek(new Date())
+              const thisWeekDays = Array.from({ length: 7 }, (_, i) => addDays(thisWeekStart, i))
+              return (
+                <>
+                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: quickAddWeekPick ? 0.75 : 1.25 }}>
+                    <Box onClick={() => { setQuickAddDate(today); setQuickAddDateTouched(true); setQuickAddWeekPick(false) }} sx={{
+                      px: 1.1, py: 0.5, borderRadius: '8px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                      border: '1px solid', borderColor: quickAddDate === today ? GREEN : BORDER,
+                      bgcolor: quickAddDate === today ? alpha(GREEN, 0.1) : 'transparent', color: quickAddDate === today ? GREEN : T2,
+                    }}>Hoy</Box>
+                    <Box onClick={() => { setQuickAddDate(tomorrowKey); setQuickAddDateTouched(true); setQuickAddWeekPick(false) }} sx={{
+                      px: 1.1, py: 0.5, borderRadius: '8px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                      border: '1px solid', borderColor: quickAddDate === tomorrowKey ? GREEN : BORDER,
+                      bgcolor: quickAddDate === tomorrowKey ? alpha(GREEN, 0.1) : 'transparent', color: quickAddDate === tomorrowKey ? GREEN : T2,
+                    }}>Mañana</Box>
+                    <Box onClick={() => setQuickAddWeekPick(v => !v)} sx={{
+                      px: 1.1, py: 0.5, borderRadius: '8px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                      border: '1px solid', borderColor: quickAddWeekPick ? GREEN : BORDER,
+                      bgcolor: quickAddWeekPick ? alpha(GREEN, 0.1) : 'transparent', color: quickAddWeekPick ? GREEN : T2,
+                    }}>Esta semana</Box>
+                  </Box>
+                  {quickAddWeekPick && (
+                    <Box sx={{ display: 'flex', gap: 0.5, mb: 1.25 }}>
+                      {thisWeekDays.map((d, i) => {
+                        const k = toKey(d)
+                        return (
+                          <Box key={k} onClick={() => { setQuickAddDate(k); setQuickAddDateTouched(true) }} sx={{
+                            width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                            border: '1px solid', borderColor: quickAddDate === k ? GREEN : BORDER,
+                            bgcolor: quickAddDate === k ? GREEN : 'transparent',
+                            color: quickAddDate === k ? '#fff' : T2,
+                          }}>{DIA_LETRAS[i]}</Box>
+                        )
+                      })}
+                    </Box>
+                  )}
+                  <Box component="input" type="date" value={quickAddDate}
+                    onChange={e => { setQuickAddDate(e.target.value); setQuickAddDateTouched(true); setQuickAddWeekPick(false) }}
+                    sx={{ mb: 1.25, border: `1px solid ${BORDER}`, borderRadius: '8px', px: 1.25, py: 0.625, fontSize: 13, fontFamily: 'inherit', color: T1, outline: 'none', bgcolor: '#fff' }} />
+                </>
+              )
+            })()}
 
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
               <Box sx={{ display: 'flex', gap: 0.75 }}>
