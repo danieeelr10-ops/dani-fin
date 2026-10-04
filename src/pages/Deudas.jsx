@@ -15,7 +15,7 @@ const BORDER = '#E5E7EB'
 
 function parseAmt(s) { const n = parseInt(String(s).replace(/\D/g, ''), 10); return isNaN(n) ? 0 : n }
 function fmtInput(s) { const n = parseInt(String(s).replace(/\D/g, ''), 10); return isNaN(n) || n === 0 ? '' : n.toLocaleString('es-CO') }
-function todayISO() { return new Date().toISOString().split('T')[0] }
+function todayISO() { return new Date().toLocaleDateString('en-CA') }
 
 function ProgressBar({ pct, saldada }) {
   const color = saldada ? GREEN : pct > 0.8 ? GREEN : pct > 0.4 ? AMBER : RED

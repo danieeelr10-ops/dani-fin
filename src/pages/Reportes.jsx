@@ -69,7 +69,7 @@ function VistaSemanaTx({ txs }) {
   const hoy = new Date();
   const dias = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(hoy); d.setDate(hoy.getDate() - (6 - i));
-    return d.toISOString().split('T')[0];
+    return d.toLocaleDateString('en-CA');
   });
 
   const porDia = useMemo(() => {

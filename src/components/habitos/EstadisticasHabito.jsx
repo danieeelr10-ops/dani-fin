@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Box, Typography, alpha } from '@mui/material'
 
-function toKey(d) { return d.toISOString().split('T')[0] }
+function toKey(d) { return d.toLocaleDateString('en-CA') }
 
 function getLast14(done, habitId) {
   return Array.from({ length: 14 }, (_, i) => {

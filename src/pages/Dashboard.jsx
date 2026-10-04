@@ -120,7 +120,7 @@ function DashboardInner() {
   }, [allMetrics]);
 
   const gastoHoy = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = new Date().toLocaleDateString('en-CA');
     return txsMes.filter(t => t.movimiento === 'Egreso' && t.fecha?.split('T')[0] === todayStr)
       .reduce((s, t) => s + Math.abs(t.total), 0);
   }, [txsMes]);

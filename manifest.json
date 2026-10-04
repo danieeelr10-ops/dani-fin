@@ -1,7 +1,7 @@
 {
-  "name": "Dani Fin",
-  "short_name": "Dani Fin",
-  "description": "Registro de finanzas personales",
+  "name": "Rumbo",
+  "short_name": "Rumbo",
+  "description": "Tu sistema de organización personal",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

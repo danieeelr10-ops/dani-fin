@@ -15,7 +15,7 @@ export function refreshBadge() {
   try {
     const habitos = JSON.parse(localStorage.getItem('habitos') || '[]')
     if (!habitos.length) { clearBadge(); return }
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toLocaleDateString('en-CA')
     const completados = JSON.parse(localStorage.getItem(`habitos_done_${today}`) || '[]')
     const pendientes = habitos.filter(h => h.activo !== false && !completados.includes(h.id)).length
     updateBadge(pendientes)
@@ -74,7 +74,7 @@ export function checkDueReminders() {
 
   const now = new Date()
   const today = now.getDay() // 0=dom..6=sab
-  const todayKey = now.toISOString().split('T')[0]
+  const todayKey = now.toLocaleDateString('en-CA')
   const shownKey = `notif_shown_${todayKey}`
   const shown = new Set(JSON.parse(localStorage.getItem(shownKey) || '[]'))
 
@@ -86,13 +86,13 @@ export function checkDueReminders() {
     dueTime.setHours(r.hour, r.minute, 0, 0)
 
     if (now >= dueTime) {
-      showNotification('Dani Fin · Recordatorio', r.label, { tag: r.id })
+      showNotification('Rumbo · Recordatorio', r.label, { tag: r.id })
       shown.add(r.id)
     } else {
       // Programar para más tarde en esta sesión
       const delay = dueTime - now
       setTimeout(() => {
-        showNotification('Dani Fin · Recordatorio', r.label, { tag: r.id })
+        showNotification('Rumbo · Recordatorio', r.label, { tag: r.id })
         const s = new Set(JSON.parse(localStorage.getItem(shownKey) || '[]'))
         s.add(r.id)
         localStorage.setItem(shownKey, JSON.stringify([...s]))
