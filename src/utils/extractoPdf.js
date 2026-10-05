@@ -12,9 +12,13 @@ const GRID      = [229, 231, 235]
 const ROW_ALT   = [249, 250, 251]
 
 function fmtCOP(n) { return '$' + Math.round(n || 0).toLocaleString('es-CO') }
+// OJO: "2026-10-05" (solo fecha, sin hora) lo parsea como medianoche UTC —
+// en Bogotá (UTC-5) eso cae el día anterior al formatear en hora local. Igual
+// bug que ya se arregló en el resto de la app; acá se fuerza mediodía local
+// para fechas de solo-día, y se deja igual si ya trae hora.
 function fmtFecha(iso) {
   if (!iso) return '—'
-  const d = new Date(iso)
+  const d = iso.length <= 10 ? new Date(`${iso}T12:00:00`) : new Date(iso)
   return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
@@ -36,22 +40,38 @@ export function generarExtractoPDF(cuenta, pagos, { filtro = 'todos' } = {}) {
   const totalEgresos  = sorted.filter(p => !esIngreso(p)).reduce((s, p) => s + (p.monto || 0), 0)
   const neto = totalIngresos - totalEgresos
 
-  // ---- Header ----
-  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(...BLUE)
-  pdf.text('RUMBO · EXTRACTO', MARGIN, y)
-  pdf.setTextColor(...TEXT_DIM)
-  pdf.text(new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' }), pageW - MARGIN, y, { align: 'right' })
+  // ---- Header ---- centrado, estilo membrete: sello + wordmark Rumbo,
+  // después el título de la cuenta. Nota: las fuentes base de jsPDF
+  // (helvetica) no soportan emoji — por eso cuenta.emoji NO se imprime acá
+  // (salía como un carácter roto); el acento visual lo da el sello verde.
+  const cx = pageW / 2
+  const logoR = 4.5
+  pdf.setFillColor(...GREEN)
+  pdf.circle(cx, y + logoR, logoR, 'F')
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(255, 255, 255)
+  pdf.text('R', cx, y + logoR + 1.2, { align: 'center' })
+
+  y += logoR * 2 + 6
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); pdf.setTextColor(...TEXT)
+  pdf.setCharSpace(1.4)
+  pdf.text('RUMBO', cx, y, { align: 'center' })
+  pdf.setCharSpace(0)
 
   y += 10
+  pdf.setDrawColor(...GRID); pdf.setLineWidth(0.3)
+  pdf.line(MARGIN, y, pageW - MARGIN, y)
+  y += 11
+
   pdf.setFont('helvetica', 'bold'); pdf.setFontSize(21); pdf.setTextColor(...TEXT)
-  pdf.text(`${cuenta.emoji || ''} ${cuenta.nombre}`.trim(), MARGIN, y)
+  pdf.text(cuenta.nombre, cx, y, { align: 'center' })
 
   y += 6.5
   pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10); pdf.setTextColor(...TEXT_DIM)
   const filtroLabel = filtro === 'pendientes' ? 'Pagos pendientes' : filtro === 'reportados' ? 'Pagos reportados' : 'Todos los pagos'
-  pdf.text(`${filtroLabel} · ${sorted.length} registro${sorted.length !== 1 ? 's' : ''}`, MARGIN, y)
+  const fechaGenerado = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
+  pdf.text(`${filtroLabel} · ${sorted.length} registro${sorted.length !== 1 ? 's' : ''} · ${fechaGenerado}`, cx, y, { align: 'center' })
 
-  y += 6
+  y += 10
   pdf.setDrawColor(...GRID); pdf.setLineWidth(0.3)
   pdf.line(MARGIN, y, pageW - MARGIN, y)
   y += 11
