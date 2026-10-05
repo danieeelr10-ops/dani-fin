@@ -122,6 +122,25 @@ export function generarExtractoPDF(cuenta, pagos, { filtro = 'todos' } = {}) {
           data.cell.styles.fontStyle = 'bold'
         }
       },
+      // El concepto (negrita, oscuro) y la nota (si hay) necesitan verse
+      // distintos — autoTable no soporta dos estilos en una misma celda, así
+      // que acá se le deja el texto completo (concepto+nota) para que mida el
+      // alto del row bien, willDrawCell recorta lo que dibuja por defecto a
+      // solo el concepto, y didDrawCell dibuja la nota a mano, en gris claro
+      // e itálica, justo debajo.
+      willDrawCell: (data) => {
+        if (data.section !== 'body' || data.column.index !== 1) return
+        data.cell.text = [sorted[data.row.index].concepto]
+      },
+      didDrawCell: (data) => {
+        if (data.section !== 'body' || data.column.index !== 1) return
+        const p = sorted[data.row.index]
+        if (!p.nota) return
+        const conceptoDims = pdf.getTextDimensions(p.concepto, { fontSize: 9, fontStyle: 'bold' })
+        const noteY = data.cell.y + data.cell.padding('top') + conceptoDims.h + 1.5
+        pdf.setFont('helvetica', 'italic'); pdf.setFontSize(8); pdf.setTextColor(...TEXT_DIM2)
+        pdf.text(p.nota, data.cell.x + data.cell.padding('left'), noteY)
+      },
     })
   }
 
