@@ -126,20 +126,36 @@ export function generarExtractoPDF(cuenta, pagos, { filtro = 'todos' } = {}) {
       // distintos — autoTable no soporta dos estilos en una misma celda, así
       // que acá se le deja el texto completo (concepto+nota) para que mida el
       // alto del row bien, willDrawCell recorta lo que dibuja por defecto a
-      // solo el concepto, y didDrawCell dibuja la nota a mano, en gris claro
-      // e itálica, justo debajo.
+      // solo el concepto (envuelto al ancho real de la columna, si no quedaba
+      // corto y se superponía con la nota dibujada después), y didDrawCell
+      // dibuja la nota a mano debajo, en gris claro e itálica — también
+      // envuelta, para que una nota larga no se salga de la columna.
       willDrawCell: (data) => {
         if (data.section !== 'body' || data.column.index !== 1) return
-        data.cell.text = [sorted[data.row.index].concepto]
+        const p = sorted[data.row.index]
+        const availW = data.cell.width - data.cell.padding('left') - data.cell.padding('right')
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9)
+        data.cell.text = pdf.splitTextToSize(p.concepto, availW)
       },
       didDrawCell: (data) => {
         if (data.section !== 'body' || data.column.index !== 1) return
         const p = sorted[data.row.index]
         if (!p.nota) return
-        const conceptoDims = pdf.getTextDimensions(p.concepto, { fontSize: 9, fontStyle: 'bold' })
-        const noteY = data.cell.y + data.cell.padding('top') + conceptoDims.h + 1.5
+        const availW = data.cell.width - data.cell.padding('left') - data.cell.padding('right')
+        // Mismo cálculo de interlineado que usa autoTable por dentro
+        // (fontSize/scaleFactor * 1.15) — getTextDimensions() da la altura
+        // real del glyph, que es más chica que el interlineado que autoTable
+        // realmente usó para dibujar el concepto envuelto, así que con eso
+        // quedaba muy pegado (casi superpuesto) a la nota.
+        const lineH = (fontSizePt) => (fontSizePt / pdf.internal.scaleFactor) * 1.15
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9)
+        const conceptoLines = pdf.splitTextToSize(p.concepto, availW)
+        let cursorY = data.cell.y + data.cell.padding('top') + lineH(9) * conceptoLines.length + 1.3
         pdf.setFont('helvetica', 'italic'); pdf.setFontSize(8); pdf.setTextColor(...TEXT_DIM2)
-        pdf.text(p.nota, data.cell.x + data.cell.padding('left'), noteY)
+        pdf.splitTextToSize(p.nota, availW).forEach(line => {
+          pdf.text(line, data.cell.x + data.cell.padding('left'), cursorY)
+          cursorY += lineH(8)
+        })
       },
     })
   }
