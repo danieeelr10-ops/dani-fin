@@ -4,7 +4,9 @@ import { useFinanzas } from 'src/context/FinanzasContext';
 import { useSnackbar } from 'src/context/SnackbarContext';
 import { computeMetrics } from 'src/utils/metrics';
 import { formatMoney } from 'src/utils/format';
-import { CAT_ICONS, MESES, MES_NAMES } from 'src/constants';
+import { CAT_ICONS, MES_NAMES } from 'src/constants';
+import { periodosDelAnio, filtrarPeriodo, periodoDeFecha, camposPeriodo } from 'src/utils/periodo';
+import AnioSelector from 'src/components/AnioSelector';
 
 const BG      = '#F7F7F8'
 const CARD    = '#FFFFFF'
@@ -22,7 +24,7 @@ function formatDia(dateKey) {
 }
 
 export default function Historial() {
-  const { state, deleteTransaccion, deleteMercadoDia, updateMercadoCuenta, updateTransaccion, mesActivo, setMesActivo } = useFinanzas();
+  const { state, deleteTransaccion, deleteMercadoDia, updateMercadoCuenta, updateTransaccion, mesActivo, setMesActivo, anioActivo, setAnioActivo, aniosDisponibles } = useFinanzas();
   const { showToast } = useSnackbar();
   const mes = mesActivo;
   const [editingCuenta, setEditingCuenta] = useState(null);
@@ -53,7 +55,7 @@ export default function Historial() {
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
 
   const m = computeMetrics(state.transacciones, mes);
-  const txsMes = state.transacciones.filter(t => t.mes === mes);
+  const txsMes = filtrarPeriodo(state.transacciones, mes);
 
   const txsFiltradas = useMemo(() => {
     let base = txsMes;
@@ -121,10 +123,11 @@ export default function Historial() {
                 Filtros{(filtroTipo !== 'Todos' || filtroBuscar) ? ' ·' : ''}
               </Typography>
             </Box>
-            {/* Mes selector compacto */}
+            {/* Año + mes, selector compacto */}
+            <AnioSelector anio={anioActivo} anios={aniosDisponibles} onChange={setAnioActivo} />
             <Box component="select" value={mes} onChange={e => setMesActivo(e.target.value)}
               sx={{ px: 1.25, py: 0.5, borderRadius: '20px', border: `1px solid ${BORDER}`, bgcolor: CARD, fontSize: 12, fontWeight: 600, color: T2, fontFamily: 'inherit', cursor: 'pointer', outline: 'none' }}>
-              {MESES.map((m2, i) => <option key={m2} value={m2}>{MES_NAMES[i]}</option>)}
+              {periodosDelAnio(anioActivo).map((m2, i) => <option key={m2} value={m2}>{MES_NAMES[i]}</option>)}
             </Box>
           </Box>
         </Box>
@@ -266,7 +269,7 @@ export default function Historial() {
                             if (!newDate) return;
                             updateTransaccion(t.id, {
                               fecha: newDate + 'T12:00:00',
-                              mes: 'M' + parseInt(newDate.slice(5, 7)),
+                              ...camposPeriodo(periodoDeFecha(newDate)),
                             });
                             showToast('Fecha actualizada', 'success');
                           }}

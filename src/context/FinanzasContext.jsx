@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useRef, useEffect } from 'react';
+import { createContext, useContext, useState, useRef, useEffect, useMemo } from 'react';
 import {
   DEFAULT_METAS, DEFAULT_INVERSIONES, MESES,
   CATEGORIAS_EGRESO_FIJO, CATEGORIAS_EGRESO_VARIABLE,
@@ -8,6 +8,10 @@ import { supabase } from 'src/lib/supabase';
 import { useAuth } from 'src/context/AuthContext';
 import { getMesActual } from 'src/utils/format';
 import { computeMetrics } from 'src/utils/metrics';
+import {
+  periodoDe, parsePeriodo, anioDePeriodo, mesNumDePeriodo, sumarMeses, compararPeriodos,
+  fechaInicioPeriodo, camposPeriodo, esDelPeriodo, periodoDeRegistro, aniosConDatos, ANIO_BASE,
+} from 'src/utils/periodo';
 
 const EMPTY_PRESUPUESTOS = Object.fromEntries(MESES.map(m => [m, {}]));
 const EMPTY_DETALLE      = Object.fromEntries(MESES.map(m => [m, []]));
@@ -120,6 +124,27 @@ function contarInversiones(inv) {
   return (inv?.portfolio?.length || 0) + (inv?.aportes?.length || 0);
 }
 
+// Datos que solo escribe la versión con año: transacciones con `anio` y
+// claves de periodo de años distintos de 2026 ('2027-M1') con contenido. Un
+// dispositivo con la versión vieja los conserva al editar (copia los objetos
+// tal cual), así que si un candidato no trae NINGUNO mientras el otro lado ya
+// tiene varios, es un estado viejo/rancio — subirlo o adoptarlo borraría todo
+// lo registrado con año aunque el conteo total de transacciones casi no cambie.
+function contarDatosConAnio(s) {
+  const txs = (s?.transacciones || []).filter(t => Number.isInteger(t.anio)).length;
+  const claves = ['presupuestos', 'presupuestosDetalle', 'metas', 'cierresMensuales'].reduce((n, campo) =>
+    n + Object.entries(s?.[campo] || {}).filter(([k, v]) => {
+      const p = parsePeriodo(k);
+      if (!p || p.anio === ANIO_BASE) return false;
+      return Array.isArray(v) ? v.length > 0 : Object.values(v || {}).some(Boolean);
+    }).length, 0);
+  return txs + claves;
+}
+
+function contarItemsPresupuesto(s) {
+  return Object.values(s?.presupuestosDetalle || {}).reduce((n, items) => n + (items?.length || 0), 0);
+}
+
 function pareceSerPerdidaDeDatos(actual, candidato) {
   const actualCount    = actual?.transacciones?.length || 0;
   const candidatoCount = candidato?.transacciones?.length || 0;
@@ -128,6 +153,13 @@ function pareceSerPerdidaDeDatos(actual, candidato) {
   const actualInv    = contarInversiones(actual?.inversiones);
   const candidatoInv = contarInversiones(candidato?.inversiones);
   if (actualInv >= 1 && candidatoInv === 0) return true;
+
+  // Ítems de presupuesto (ahora repartidos también en claves por año)
+  const actualItems    = contarItemsPresupuesto(actual);
+  const candidatoItems = contarItemsPresupuesto(candidato);
+  if (actualItems >= 5 && candidatoItems < actualItems * 0.2) return true;
+
+  if (contarDatosConAnio(actual) >= 5 && contarDatosConAnio(candidato) === 0) return true;
 
   return false;
 }
@@ -251,6 +283,7 @@ function migrateMercadoOrphans(s) {
         cuenta: 'Efectivo',
         fecha: item.fecha,
         mes: item.mes,
+        ...(Number.isInteger(item.anio) ? { anio: item.anio } : {}),
         cantidad: item.cantidad || 1,
       });
     });
@@ -270,7 +303,7 @@ function deduplicateTransacciones(s) {
     (items || []).forEach(i => { if (i.txId) linkedIds.add(String(i.txId)); })
   );
 
-  const key = t => `${t.mes}|${t.movimiento}|${(t.concepto || '').toLowerCase().trim()}`;
+  const key = t => `${periodoDeRegistro(t)}|${t.movimiento}|${(t.concepto || '').toLowerCase().trim()}`;
   const seen = {};
   const toDelete = new Set();
 
@@ -642,15 +675,14 @@ function fixCierresIngresosPendientes(s) {
   try { localStorage.setItem(FLAG, '1'); } catch(e) {}
 
   const cierres = s.cierresMensuales || {};
-  const mesesCerrados = Object.keys(cierres).sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)));
+  const mesesCerrados = Object.keys(cierres).filter(k => parsePeriodo(k)).sort(compararPeriodos);
   if (mesesCerrados.length === 0) return { state: s, changed: false };
 
   let changed = false;
   const fixed = { ...cierres };
 
   mesesCerrados.forEach((mes, i) => {
-    const mesNum   = parseInt(mes.replace('M', ''));
-    const prevMes  = `M${mesNum - 1}`;
+    const prevMes  = sumarMeses(mes, -1);
     // Misma regla que getCarryOver(): hereda del mes inmediatamente anterior
     // SOLO si ese mes también está cerrado; si hay un hueco, arranca en 0.
     const carryEntrante = i > 0 && mesesCerrados[i - 1] === prevMes
@@ -709,7 +741,10 @@ export function FinanzasProvider({ children }) {
   const { user } = useAuth();
   const [state, setState] = useState(loadFromStorage);
   const [syncing, setSyncing] = useState(false);
+  // Clave de periodo ('M10' = octubre 2026, '2027-M1' = enero 2027)
   const [mesActivo, setMesActivo] = useState(getMesActual());
+  const anioActivo = anioDePeriodo(mesActivo);
+  const setAnioActivo = (anio) => setMesActivo(prev => periodoDe(anio, mesNumDePeriodo(prev)));
   const historyRef = useRef([]);
   const [historyLen, setHistoryLen] = useState(0);
   const userRef = useRef(user);
@@ -869,6 +904,11 @@ export function FinanzasProvider({ children }) {
     };
   }, [user?.id]);
 
+  const aniosDisponibles = useMemo(
+    () => [...new Set([...aniosConDatos(state), anioActivo])].sort((a, b) => a - b),
+    [state.transacciones, state.presupuestos, state.presupuestosDetalle, state.metas, state.cierresMensuales, anioActivo]
+  );
+
   function update(updater) {
     setState(prev => {
       historyRef.current = [...historyRef.current.slice(-14), prev];
@@ -924,7 +964,15 @@ export function FinanzasProvider({ children }) {
       presupuestosDetalle: newDetalle,
     };
   });
-  const updateTransaccion = (id, changes) => update(prev => ({ ...prev, transacciones: prev.transacciones.map(t => t.id === id ? { ...t, ...changes } : t) }));
+  const updateTransaccion = (id, changes) => update(prev => ({ ...prev, transacciones: prev.transacciones.map(t => {
+    if (t.id !== id) return t;
+    // Una transacción vieja (sin anio) deduce su año de la fecha: si se le
+    // cambia la fecha sin decir el periodo, se fija el año que ya tenía para
+    // que no salte de año (p. ej. marcar en 2027 un cobro de junio 2026).
+    const periodoPrevio = periodoDeRegistro(t);
+    const fijarAnio = 'fecha' in changes && !('anio' in changes) && !Number.isInteger(t.anio) && periodoPrevio;
+    return { ...t, ...(fijarAnio ? { anio: anioDePeriodo(periodoPrevio) } : {}), ...changes };
+  }) }));
   // Asignar tarjeta en bloque a todas las tx de T.C sin tarjeta asignada
   const bulkAssignTarjeta = (nombreTarjeta) => update(prev => ({
     ...prev,
@@ -1010,7 +1058,7 @@ export function FinanzasProvider({ children }) {
       const detalles = [...(prev.presupuestosDetalle[mes] || []), item];
       const mesData  = recalcPresupuestoFromDetalle(prev.presupuestos[mes] || {}, detalles);
       const newTxs   = tarjeta
-        ? [{ id: tcTxId, concepto, total: -monto, pago: -monto, saldo: 0, categoria, movimiento: 'Egreso', tipo: 'Fijo', cuenta: 'T.C', tarjeta, estado: 'realizado', esFuturo: false, fecha: new Date().toISOString(), mes }, ...prev.transacciones]
+        ? [{ id: tcTxId, concepto, total: -monto, pago: -monto, saldo: 0, categoria, movimiento: 'Egreso', tipo: 'Fijo', cuenta: 'T.C', tarjeta, estado: 'realizado', esFuturo: false, fecha: new Date().toISOString(), ...camposPeriodo(mes) }, ...prev.transacciones]
         : prev.transacciones;
       return {
         ...prev,
@@ -1049,7 +1097,7 @@ export function FinanzasProvider({ children }) {
   function getItemPagosDelMes(item, transacciones, mes) {
     return getItemPagos(item).filter(p => {
       const tx = transacciones.find(t => t.id === p.txId);
-      return tx && tx.mes === mes;
+      return tx && esDelPeriodo(tx, mes);
     });
   }
   function getItemMontoPagado(item, transacciones, mes) {
@@ -1087,7 +1135,7 @@ export function FinanzasProvider({ children }) {
         cuenta,
         ...(cuenta === 'T.C' && tarjeta ? { tarjeta } : {}),
         fecha: new Date().toISOString(),
-        mes,
+        ...camposPeriodo(mes),
       };
 
       const nuevosPagos = [...getItemPagos(item), { txId, cuenta, tarjeta: tarjeta || null, monto: montoFinal }];
@@ -1199,17 +1247,15 @@ export function FinanzasProvider({ children }) {
       // vez que se cierra un mes, en vez de arrastrarse mes a mes.
       const carry_over = getCarryOver(mes) + balance;
 
-      // Cobros pendientes del mes → mover al siguiente mes
-      const mesNum     = parseInt(mes.replace('M', ''));
-      const nextMesNum = Math.min(mesNum + 1, 12);
-      const nextMes    = `M${nextMesNum}`;
-      const year       = new Date().getFullYear();
-      const nextFecha  = `${year}-${String(nextMesNum).padStart(2, '0')}-01T12:00:00`;
+      // Cobros pendientes del mes → mover al siguiente mes (diciembre → enero del año siguiente)
+      const nextMes    = sumarMeses(mes, 1);
+      const year       = anioDePeriodo(mes);
+      const nextFecha  = fechaInicioPeriodo(nextMes);
 
       const pendingIds = new Set(
         (prev.transacciones || [])
           .filter(t =>
-            t.mes === mes &&
+            esDelPeriodo(t, mes) &&
             t.movimiento === 'Ingreso' &&
             (t.esFuturo === true || t.estado === 'pendiente' || t.estado === 'parcial')
           )
@@ -1217,11 +1263,11 @@ export function FinanzasProvider({ children }) {
       );
 
       const updatedTransacciones = (prev.transacciones || []).map(t =>
-        pendingIds.has(t.id) ? { ...t, mes: nextMes, fecha: nextFecha } : t
+        pendingIds.has(t.id) ? { ...t, ...camposPeriodo(nextMes), fecha: nextFecha } : t
       );
 
       const cierre = {
-        mes,
+        mes: camposPeriodo(mes).mes,
         year,
         total_income:      m.ingRecibidos,
         total_expenses:    m.egCash,
@@ -1240,9 +1286,9 @@ export function FinanzasProvider({ children }) {
   }
 
   function getCarryOver(mes) {
-    const idx = parseInt(mes.replace('M', ''));
-    const prevMes = `M${idx - 1}`;
-    const cierre = idx > 1 ? state.cierresMensuales?.[prevMes]?.carry_over_amount : undefined;
+    // Enero hereda del diciembre anterior (otro año) igual que cualquier otro mes
+    const prevMes = sumarMeses(mes, -1);
+    const cierre = state.cierresMensuales?.[prevMes]?.carry_over_amount;
     if (cierre !== undefined) return cierre;
     // Sin cierres previos: usar saldos iniciales solo en el mes actual
     const hasCierres = Object.keys(state.cierresMensuales || {}).length > 0;
@@ -1453,7 +1499,7 @@ export function FinanzasProvider({ children }) {
       saveTarjetas, bulkAssignTarjeta, savePresupuestoTarjetas, registrarMercado,
       saveHabitos, toggleHabitoCheck, usarFreeze,
       saveSaldoInicial,
-      mesActivo, setMesActivo,
+      mesActivo, setMesActivo, anioActivo, setAnioActivo, aniosDisponibles,
       resetAll, restoreFromBackup,
       closeMonth, getCarryOver, getCierre, deleteCierre,
       liquidarTC,

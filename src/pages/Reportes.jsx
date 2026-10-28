@@ -5,7 +5,9 @@ import { useFinanzas } from 'src/context/FinanzasContext';
 import { computeMetrics } from 'src/utils/metrics';
 import { computeIngresoStats } from 'src/utils/cashflow';
 import { formatMoney, formatMoneyShort, getMesActual } from 'src/utils/format';
-import { MESES, MES_NAMES, CAT_ICONS } from 'src/constants';
+import { MES_NAMES, CAT_ICONS } from 'src/constants';
+import { periodosDelAnio, sumarMeses, nombreMes } from 'src/utils/periodo';
+import AnioSelector from 'src/components/AnioSelector';
 
 const BG      = '#F7F7F8';
 const CARD    = '#FFFFFF';
@@ -140,8 +142,7 @@ function VistaSemanaTx({ txs }) {
 // ── Vista Mensual ──────────────────────────────────────────────
 function VistaMensual({ state, mes }) {
   const m       = computeMetrics(state.transacciones, mes);
-  const mesIdx  = MESES.indexOf(mes);
-  const mesName = MES_NAMES[mesIdx];
+  const mesName = nombreMes(mes);
 
   const catData = Object.entries(m.byCat).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 7);
   const catTotal = catData.reduce((s, [, v]) => s + v, 0) || 1;
@@ -189,8 +190,8 @@ function VistaMensual({ state, mes }) {
 // ── Vista Trimestral ───────────────────────────────────────────
 function VistaTrimestral({ state }) {
   const mesActual = getMesActual();
-  const mesIdx    = MESES.indexOf(mesActual);
-  const meses3    = [MESES[mesIdx - 2], MESES[mesIdx - 1], MESES[mesIdx]].filter(Boolean);
+  // Últimos 3 meses, cruzando el cambio de año si hace falta
+  const meses3    = [sumarMeses(mesActual, -2), sumarMeses(mesActual, -1), mesActual];
 
   const metricas  = meses3.map(m => ({ mes: m, ...computeMetrics(state.transacciones, m) }));
   const totIng    = metricas.reduce((s, mt) => s + mt.ing, 0);
@@ -231,7 +232,7 @@ function VistaTrimestral({ state }) {
             colors: [GREEN, RED],
             stroke: { width: 0 },
             plotOptions: { bar: { borderRadius: 4, columnWidth: '60%', borderRadiusApplication: 'end' } },
-            xaxis: { categories: meses3.map(m => MES_NAMES[MESES.indexOf(m)]), labels: { style: { fontSize: '11px' } } },
+            xaxis: { categories: meses3.map(nombreMes), labels: { style: { fontSize: '11px' } } },
             yaxis: { labels: { formatter: v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'k' : v, style: { colors: '#919EAB', fontSize: '10px' } } },
             tooltip: { theme: 'dark', y: { formatter: v => formatMoney(v) } },
           })}
@@ -251,8 +252,8 @@ function VistaTrimestral({ state }) {
 }
 
 // ── Vista Anual ────────────────────────────────────────────────
-function VistaAnual({ state }) {
-  const allM    = MESES.map(m => computeMetrics(state.transacciones, m));
+function VistaAnual({ state, anio }) {
+  const allM    = periodosDelAnio(anio).map(m => computeMetrics(state.transacciones, m));
   const conDatos = allM.filter(m => m.hasData);
 
   const totIng   = conDatos.reduce((s, m) => s + m.ing, 0);
@@ -294,13 +295,13 @@ function VistaAnual({ state }) {
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 3 }}>
           <Box sx={{ bgcolor: 'rgba(0,167,111,0.06)', borderRadius: '12px', p: 1.75, border: '1px solid rgba(0,167,111,0.2)' }}>
             <Typography sx={{ fontSize: 10, fontWeight: 700, color: GREEN, textTransform: 'uppercase', mb: 0.25 }}>Mejor mes</Typography>
-            <Typography sx={{ fontSize: 15, fontWeight: 800, color: T1 }}>{MES_NAMES[MESES.indexOf(MESES.find((_, i) => allM[i] === mejorMes))]}</Typography>
+            <Typography sx={{ fontSize: 15, fontWeight: 800, color: T1 }}>{MES_NAMES[allM.indexOf(mejorMes)]}</Typography>
             <Typography sx={{ fontSize: 12, fontWeight: 600, color: GREEN }}>+{formatMoneyShort(mejorMes.neto)}</Typography>
           </Box>
           {peorMes && peorMes !== mejorMes && (
             <Box sx={{ bgcolor: 'rgba(220,38,38,0.04)', borderRadius: '12px', p: 1.75, border: '1px solid rgba(220,38,38,0.15)' }}>
               <Typography sx={{ fontSize: 10, fontWeight: 700, color: RED, textTransform: 'uppercase', mb: 0.25 }}>Mes más bajo</Typography>
-              <Typography sx={{ fontSize: 15, fontWeight: 800, color: T1 }}>{MES_NAMES[MESES.indexOf(MESES.find((_, i) => allM[i] === peorMes))]}</Typography>
+              <Typography sx={{ fontSize: 15, fontWeight: 800, color: T1 }}>{MES_NAMES[allM.indexOf(peorMes)]}</Typography>
               <Typography sx={{ fontSize: 12, fontWeight: 600, color: peorMes.neto >= 0 ? T2 : RED }}>{peorMes.neto >= 0 ? '+' : ''}{formatMoneyShort(peorMes.neto)}</Typography>
             </Box>
           )}
@@ -368,7 +369,7 @@ function VistaAnual({ state }) {
 
 // ── Main ───────────────────────────────────────────────────────
 export default function Reportes() {
-  const { state, mesActivo, setMesActivo } = useFinanzas();
+  const { state, mesActivo, setMesActivo, anioActivo, setAnioActivo, aniosDisponibles } = useFinanzas();
   const [periodo, setPeriodo] = useState(1); // 0=Semana 1=Mes 2=Trimestre 3=Año
   const txs = state.transacciones || [];
 
@@ -395,10 +396,19 @@ export default function Reportes() {
           ))}
         </Box>
 
-        {/* Selector de mes (solo en vista Mes) */}
+        {/* Selector de año (vistas Mes y Año) */}
+        {periodo === 3 && (
+          <Box sx={{ mb: 2.5 }}>
+            <AnioSelector anio={anioActivo} anios={aniosDisponibles} onChange={setAnioActivo} />
+          </Box>
+        )}
+
+        {/* Selector de año y mes (solo en vista Mes) */}
         {periodo === 1 && (
-          <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, mb: 2.5, pb: 0.5 }}>
-            {MESES.map((m, i) => {
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 2.5, pb: 0.5 }}>
+          <AnioSelector anio={anioActivo} anios={aniosDisponibles} onChange={setAnioActivo} />
+          <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, minWidth: 0, flex: 1 }}>
+            {periodosDelAnio(anioActivo).map((m, i) => {
               const met = computeMetrics(txs, m);
               return (
                 <Box key={m} onClick={() => setMesActivo(m)} sx={{
@@ -413,13 +423,14 @@ export default function Reportes() {
               );
             })}
           </Box>
+          </Box>
         )}
 
         {/* Contenido */}
         {periodo === 0 && <VistaSemanaTx txs={txs} />}
         {periodo === 1 && <VistaMensual state={state} mes={mesActivo} />}
         {periodo === 2 && <VistaTrimestral state={state} />}
-        {periodo === 3 && <VistaAnual state={state} />}
+        {periodo === 3 && <VistaAnual state={state} anio={anioActivo} />}
 
       </Box>
     </Box>

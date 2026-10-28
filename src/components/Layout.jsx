@@ -8,6 +8,7 @@ import { useFeatures } from 'src/context/FeaturesContext';
 import { usePWA } from 'src/hooks/usePWA';
 import { checkDueReminders, refreshBadge } from 'src/utils/notifications';
 import { CAT_ICONS } from 'src/constants';
+import { periodoDeFecha, camposPeriodo } from 'src/utils/periodo';
 
 const QC_GREEN  = '#00A76F';
 const QC_RED    = '#DC2626';
@@ -50,12 +51,11 @@ function QuickCapture({ open, onClose }) {
     const val = parseInt(monto.replace(/\D/g, ''), 10);
     if (!val || !categoria || !cuenta) return;
     const fechaFinal = fecha || todayStr();
-    const mes = 'M' + parseInt(fechaFinal.split('-')[1], 10);
     const esTarjeta = tarjetaNombres.has(cuenta);
     addTransaccion({
       id: Date.now(),
       fecha: new Date(fechaFinal + 'T12:00:00').toISOString(),
-      mes,
+      ...camposPeriodo(periodoDeFecha(fechaFinal)),
       tipo: 'Variable', movimiento: tipo,
       categoria, concepto: concepto.trim() || categoria,
       total: tipo === 'Egreso' ? -val : val,

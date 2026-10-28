@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "start": "vite preview"
+    "start": "vite preview",
+    "test": "node --test src/utils/metrics.test.js"
   },
   "engines": {
     "node": "24.x"

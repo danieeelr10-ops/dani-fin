@@ -5,7 +5,10 @@ import { useFinanzas } from 'src/context/FinanzasContext'
 import { useSnackbar } from 'src/context/SnackbarContext'
 import { computeMetrics } from 'src/utils/metrics'
 import { formatMoney, formatMoneyShort } from 'src/utils/format'
-import { MESES, MES_NAMES } from 'src/constants'
+import { MES_NAMES } from 'src/constants'
+import { periodosDelAnio, parsePeriodo, sumarMeses, etiquetaPeriodo } from 'src/utils/periodo'
+import { getMesActual } from 'src/utils/format'
+import AnioSelector from 'src/components/AnioSelector'
 
 const BG      = '#F7F7F8'
 const CARD    = '#FFFFFF'
@@ -59,7 +62,7 @@ function fmtInput(n) { const x = parseInt(String(n).replace(/\D/g,''),10); retur
 
 export default function Metas() {
   const navigate = useNavigate()
-  const { state, updateMeta, addMetaPersonalizada, updateMetaPersonalizada, deleteMetaPersonalizada } = useFinanzas()
+  const { state, updateMeta, addMetaPersonalizada, updateMetaPersonalizada, deleteMetaPersonalizada, anioActivo, setAnioActivo, aniosDisponibles } = useFinanzas()
   const { showToast } = useSnackbar()
   const [tab, setTab]           = useState(0)
   const [metaModal, setMetaModal]     = useState(null)
@@ -92,19 +95,22 @@ export default function Metas() {
     setMpModal(null); showToast('Meta guardada', 'success');
   }
 
-  const currentYear = new Date().getFullYear()
-  const mesActual   = 'M' + (new Date().getMonth() + 1)
+  const mesActual    = getMesActual()
+  const mesesDelAnio = periodosDelAnio(anioActivo)
 
   const invAportes   = state.inversiones?.aportes   || []
   const invPortfolio = state.inversiones?.portfolio || null
   const invPrecios   = state.inversiones?.precios   || {}
 
   const totalInvUSD = useMemo(() => invAportes.reduce((s, a) => s + (a.usd || 0), 0), [invAportes])
+  const totalInvUSDAnio = useMemo(() => invAportes
+    .filter(a => new Date(a.fecha).getFullYear() === anioActivo)
+    .reduce((s, a) => s + (a.usd || 0), 0), [invAportes, anioActivo])
 
   function invUSDForMes(mesKey) {
-    const idx = MESES.indexOf(mesKey)
+    const { anio, mesNum } = parsePeriodo(mesKey)
     return invAportes
-      .filter(a => { const d = new Date(a.fecha); return d.getFullYear() === currentYear && d.getMonth() === idx })
+      .filter(a => { const d = new Date(a.fecha); return d.getFullYear() === anio && d.getMonth() === mesNum - 1 })
       .reduce((s, a) => s + (a.usd || 0), 0)
   }
 
@@ -116,19 +122,20 @@ export default function Metas() {
 
   const anual = useMemo(() => {
     let metaAhorroAnual = 0, metaInvAnualUSD = 0, realAhorro = 0
-    MESES.forEach(m => {
+    mesesDelAnio.forEach(m => {
       const meta = state.metas[m] || { ahorro: 0, inversion: 0 }
       metaAhorroAnual += meta.ahorro    || 0
       metaInvAnualUSD += meta.inversion || 0
       realAhorro += ahorroRealDeMes(m)
     })
     return { metaAhorroAnual, metaInvAnualUSD, realAhorro }
-  }, [state.transacciones, state.metas])
+  }, [state.transacciones, state.metas, anioActivo])
 
   const racha = useMemo(() => {
+    // Desde el mes en curso hacia atrás, cruzando el cambio de año; se corta en
+    // el primer mes sin meta, así que el límite de iteraciones es solo un tope
     let streak = 0
-    for (let i = MESES.indexOf(mesActual); i >= 0; i--) {
-      const m    = MESES[i]
+    for (let i = 0, m = mesActual; i < 600; i++, m = sumarMeses(m, -1)) {
       const meta = state.metas[m] || { ahorro: 0, inversion: 0 }
       const metaA = meta.ahorro    || 0
       const metaI = meta.inversion || 0
@@ -173,16 +180,19 @@ export default function Metas() {
   }
 
   const pctAhorro = anual.metaAhorroAnual > 0 ? Math.min(anual.realAhorro / anual.metaAhorroAnual, 1) : 0
-  const pctInv    = anual.metaInvAnualUSD  > 0 ? Math.min(totalInvUSD    / anual.metaInvAnualUSD,  1) : 0
+  const pctInv    = anual.metaInvAnualUSD  > 0 ? Math.min(totalInvUSDAnio / anual.metaInvAnualUSD,  1) : 0
 
   return (
     <Box sx={{ bgcolor: BG, minHeight: '100%' }}>
     <Box sx={{ maxWidth: 600, mx: 'auto' }}>
 
       {/* Header */}
-      <Box sx={{ px: 2, pt: 2.5, pb: 1.5 }}>
-        <Typography sx={{ fontSize: 22, fontWeight: 700, color: T1, letterSpacing: '-0.3px' }}>Metas</Typography>
-        <Typography sx={{ fontSize: 13, color: T2, mt: 0.25 }}>Ahorro e inversiones {currentYear}</Typography>
+      <Box sx={{ px: 2, pt: 2.5, pb: 1.5, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 1 }}>
+        <Box>
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: T1, letterSpacing: '-0.3px' }}>Metas</Typography>
+          <Typography sx={{ fontSize: 13, color: T2, mt: 0.25 }}>Ahorro e inversiones {anioActivo}</Typography>
+        </Box>
+        <AnioSelector anio={anioActivo} anios={aniosDisponibles} onChange={setAnioActivo} />
       </Box>
 
       {/* Hero anual */}
@@ -219,15 +229,15 @@ export default function Metas() {
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.875 }}>
-              <Typography sx={{ fontSize: 13, fontWeight: 600, color: GREEN }}>${totalInvUSD.toFixed(0)}</Typography>
+              <Typography sx={{ fontSize: 13, fontWeight: 600, color: GREEN }}>${totalInvUSDAnio.toFixed(0)}</Typography>
               <Typography sx={{ fontSize: 11, color: T2 }}>meta ${anual.metaInvAnualUSD.toFixed(0)}</Typography>
             </Box>
             <Box sx={{ height: 6, bgcolor: '#F3F4F6', borderRadius: 3, overflow: 'hidden' }}>
               <Box sx={{ height: '100%', width: `${pctInv * 100}%`, bgcolor: GREEN, borderRadius: 3, transition: 'width 0.5s' }} />
             </Box>
-            {anual.metaInvAnualUSD > 0 && totalInvUSD < anual.metaInvAnualUSD && (
+            {anual.metaInvAnualUSD > 0 && totalInvUSDAnio < anual.metaInvAnualUSD && (
               <Typography sx={{ fontSize: 11, color: T2, mt: 0.5 }}>
-                Falta ${(anual.metaInvAnualUSD - totalInvUSD).toFixed(0)} USD para la meta
+                Falta ${(anual.metaInvAnualUSD - totalInvUSDAnio).toFixed(0)} USD para la meta
               </Typography>
             )}
           </Box>
@@ -392,7 +402,7 @@ export default function Metas() {
       {/* Tab Mensual */}
       {tab === 0 && (
         <Box sx={{ px: 2, pb: 4, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-          {MESES.map((m, i) => {
+          {mesesDelAnio.map((m, i) => {
             const meta    = state.metas[m] || { ahorro: 0, inversion: 0 }
             const invUSD  = invUSDForMes(m)
             const metaA   = meta.ahorro    || 0
@@ -575,7 +585,7 @@ export default function Metas() {
       {/* Modal meta mensual */}
       <Dialog open={!!metaModal} onClose={() => setMetaModal(null)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ fontWeight: 700, pb: 1, fontSize: 16, color: T1 }}>
-          Meta — {metaModal ? MES_NAMES[MESES.indexOf(metaModal)] : ''}
+          Meta — {metaModal ? etiquetaPeriodo(metaModal) : ''}
         </DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>

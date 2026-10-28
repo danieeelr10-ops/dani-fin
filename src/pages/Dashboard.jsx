@@ -4,7 +4,9 @@ import ReactApexChart from 'react-apexcharts';
 import { useFinanzas } from 'src/context/FinanzasContext';
 import { computeMetrics } from 'src/utils/metrics';
 import { formatMoney, getMesActual } from 'src/utils/format';
-import { MESES, MES_NAMES, CAT_ICONS } from 'src/constants';
+import { MES_NAMES, CAT_ICONS } from 'src/constants';
+import { periodosDelAnio, filtrarPeriodo, anioDePeriodo, mesNumDePeriodo, periodoDe } from 'src/utils/periodo';
+import AnioSelector from 'src/components/AnioSelector';
 
 // ── Constantes de diseño ──────────────────────────────────────
 const BG      = '#F7F7F8'
@@ -60,16 +62,18 @@ function StatusBadge({ rate }) {
 }
 
 function DashboardInner() {
-  const { state } = useFinanzas();
+  const { state, aniosDisponibles } = useFinanzas();
   const [mes, setMes] = useState(getMesActual());
 
+  const anio     = anioDePeriodo(mes);
+  const mesesDelAnio = useMemo(() => periodosDelAnio(anio), [anio]);
   const m        = useMemo(() => computeMetrics(state.transacciones, mes), [state.transacciones, mes]);
-  const mesIdx   = MESES.indexOf(mes);
+  const mesIdx   = mesNumDePeriodo(mes) - 1;
   const mesName  = MES_NAMES[mesIdx];
-  const allMetrics = useMemo(() => MESES.map(ms => computeMetrics(state.transacciones, ms)), [state.transacciones]);
-  const txsMes   = useMemo(() => state.transacciones.filter(t => t.mes === mes), [state.transacciones, mes]);
+  const allMetrics = useMemo(() => mesesDelAnio.map(ms => computeMetrics(state.transacciones, ms)), [state.transacciones, mesesDelAnio]);
+  const txsMes   = useMemo(() => filtrarPeriodo(state.transacciones, mes), [state.transacciones, mes]);
 
-  const daysInMonth = new Date(2026, mesIdx + 1, 0).getDate();
+  const daysInMonth = new Date(anio, mesIdx + 1, 0).getDate();
   const today = mes === getMesActual() ? new Date().getDate() : daysInMonth;
 
   // Gasto acumulado diario
@@ -101,7 +105,11 @@ function DashboardInner() {
 
   // Saldo acumulado real + proyección
   const { saldoAcumReal, saldoAcumProy } = useMemo(() => {
-    const mesActualIdx = MESES.indexOf(getMesActual());
+    // Índice del mes en curso dentro del año mostrado: 11 si el año ya pasó
+    // (todo es real), -1 si es un año futuro (nada es real todavía)
+    const actual = getMesActual();
+    const mesActualIdx = anioDePeriodo(actual) === anio ? mesNumDePeriodo(actual) - 1
+      : anioDePeriodo(actual) > anio ? 11 : -1;
     // Acumulado real: suma de netos de meses con datos
     const real = allMetrics.reduce((acc, mt, i) => {
       const prev = i > 0 ? acc[i - 1] : 0;
@@ -112,12 +120,12 @@ function DashboardInner() {
     const ultimosDatos = allMetrics.slice(Math.max(0, mesActualIdx - 2), mesActualIdx + 1).filter(mt => mt.hasData);
     const promNeto = ultimosDatos.length ? ultimosDatos.reduce((s, mt) => s + mt.neto, 0) / ultimosDatos.length : 0;
     const proy = allMetrics.map((mt, i) => {
-      if (i <= mesActualIdx) return null;
+      if (i <= mesActualIdx || mesActualIdx < 0) return null;
       const base = real[mesActualIdx] ?? 0;
       return Math.round(base + promNeto * (i - mesActualIdx));
     });
     return { saldoAcumReal: real, saldoAcumProy: proy };
-  }, [allMetrics]);
+  }, [allMetrics, anio]);
 
   const gastoHoy = useMemo(() => {
     const todayStr = new Date().toLocaleDateString('en-CA');
@@ -134,12 +142,14 @@ function DashboardInner() {
         {/* Header */}
         <Box sx={{ pt: 3, pb: 2 }}>
           <Typography sx={{ fontSize: 22, fontWeight: 600, color: T1, letterSpacing: '-0.3px', lineHeight: 1.2 }}>Gráficas</Typography>
-          <Typography sx={{ fontSize: 13, color: T2, mt: 0.25 }}>Análisis de {mesName}</Typography>
+          <Typography sx={{ fontSize: 13, color: T2, mt: 0.25 }}>Análisis de {mesName} {anio}</Typography>
         </Box>
 
-        {/* Month pills */}
-        <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, mb: 2.5, pb: 0.5 }}>
-          {MESES.map((m2, i) => (
+        {/* Year + month pills */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 2.5, pb: 0.5 }}>
+        <AnioSelector anio={anio} anios={aniosDisponibles} onChange={a => setMes(periodoDe(a, mesIdx + 1))} />
+        <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, minWidth: 0, flex: 1 }}>
+          {mesesDelAnio.map((m2, i) => (
             <Box key={m2} onClick={() => setMes(m2)} sx={{
               px: 1.75, py: 0.625, borderRadius: '20px', fontSize: 12, fontWeight: 600,
               whiteSpace: 'nowrap', cursor: 'pointer', border: '1px solid', flexShrink: 0, transition: 'all 0.15s',
@@ -150,6 +160,7 @@ function DashboardInner() {
               {MES_NAMES[i]}
             </Box>
           ))}
+        </Box>
         </Box>
 
         {/* KPIs */}
@@ -311,7 +322,7 @@ function DashboardInner() {
         <Box sx={{ mb: 3 }}>
           <SectionLabel>Resumen mensual</SectionLabel>
           <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
-            {MESES.map((m2, i) => {
+            {mesesDelAnio.map((m2, i) => {
               const mt = allMetrics[i];
               if (!mt.hasData) return null;
               const isActive = m2 === mes;

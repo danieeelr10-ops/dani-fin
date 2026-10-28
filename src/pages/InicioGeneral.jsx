@@ -4,8 +4,7 @@ import { Box, Typography, alpha } from '@mui/material'
 import { useFinanzas } from 'src/context/FinanzasContext'
 import { useAuth } from 'src/context/AuthContext'
 import { computeMetrics } from 'src/utils/metrics'
-import { formatMoneyShort } from 'src/utils/format'
-import { MESES } from 'src/constants'
+import { formatMoneyShort, getMesActual } from 'src/utils/format'
 import { useSyncedState } from 'src/utils/cloudSync'
 
 const BG      = '#F7F7F8'
@@ -48,7 +47,7 @@ export default function InicioGeneral() {
 
   const nombre = (user?.user_metadata?.name || user?.email || '').split(' ')[0].split('@')[0]
   const hoy = toKey(new Date())
-  const mesActual = 'M' + (new Date().getMonth() + 1)
+  const mesActual = getMesActual()
 
   // Finanzas
   const fin = useMemo(() => computeMetrics(state.transacciones, mesActual), [state.transacciones, mesActual])

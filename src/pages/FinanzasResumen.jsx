@@ -8,7 +8,9 @@ import { computeMetrics } from 'src/utils/metrics'
 import { computeProximosPagos, computeAlertas, computeProyeccionMes } from 'src/utils/cashflow'
 import AlertasBanner from 'src/components/AlertasBanner'
 import { formatMoney, formatMoneyShort, getMesActual } from 'src/utils/format'
-import { CAT_ICONS, CAT_COLORS, MES_NAMES, MESES } from 'src/constants'
+import { CAT_ICONS, CAT_COLORS, MES_NAMES } from 'src/constants'
+import { periodosDelAnio, periodoDeRegistro, filtrarPeriodo, sumarMeses, nombreMes, mesNumDePeriodo } from 'src/utils/periodo'
+import AnioSelector from 'src/components/AnioSelector'
 
 // ── Constantes de diseño ──────────────────────────────────────
 const BG      = '#F7F7F8'
@@ -420,20 +422,21 @@ export default function Inicio() {
 
 function InicioInner() {
   const navigate = useNavigate()
-  const { state, mesActivo, setMesActivo, closeMonth, getCarryOver, getCierre, deleteCierre } = useFinanzas()
+  const { state, mesActivo, setMesActivo, anioActivo, setAnioActivo, aniosDisponibles, closeMonth, getCarryOver, getCierre, deleteCierre } = useFinanzas()
   const [desglose, setDesglose] = useState(false)
   const [confirmCierre, setConfirmCierre] = useState(false)
   const mesActivoRef = useRef(null)
 
   const mes        = mesActivo
-  const mesIdx     = parseInt(mes.replace('M', '')) - 1
+  const mesIdx     = mesNumDePeriodo(mes) - 1
   const mesNombre  = MES_NAMES[mesIdx]
   const mesActualK = getMesActual()
 
-  const mesesConDatos = useMemo(() =>
-    MESES.filter(m => (state.transacciones || []).some(t => t.mes === m) || state.presupuestos?.[m]),
-    [state.transacciones, state.presupuestos]
-  )
+  const mesesDelAnio = periodosDelAnio(anioActivo)
+  const mesesConDatos = useMemo(() => {
+    const conTx = new Set((state.transacciones || []).map(periodoDeRegistro))
+    return mesesDelAnio.filter(m => conTx.has(m) || state.presupuestos?.[m])
+  }, [state.transacciones, state.presupuestos, anioActivo])
 
   // Métricas
   const metrics  = useMemo(() => computeMetrics(state.transacciones || [], mes), [state.transacciones, mes])
@@ -473,7 +476,7 @@ function InicioInner() {
 
   // Flujo por cuenta en el mes activo
   const saldosCuenta = useMemo(() => {
-    const txsMes = (state.transacciones || []).filter(t => t.mes === mes)
+    const txsMes = filtrarPeriodo(state.transacciones, mes)
     const cuentas = (state.cuentas || []).filter(c => c !== 'T.C')
     return cuentas
       .map(c => {
@@ -537,9 +540,11 @@ function InicioInner() {
           </Typography>
         </Box>
 
-        {/* ── Selector de mes ── */}
-        <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, mb: 2.5, pb: 0.5 }}>
-          {MESES.map((m, i) => {
+        {/* ── Selector de año y mes ── */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 2.5, pb: 0.5 }}>
+        <AnioSelector anio={anioActivo} anios={aniosDisponibles} onChange={setAnioActivo} />
+        <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, minWidth: 0, flex: 1 }}>
+          {mesesDelAnio.map((m, i) => {
             const activo   = m === mes
             const tieneDatos = mesesConDatos.includes(m)
             return (
@@ -558,6 +563,7 @@ function InicioInner() {
               </Box>
             )
           })}
+        </Box>
         </Box>
 
         {/* ── Alertas ── */}
@@ -591,7 +597,7 @@ function InicioInner() {
                 {esDeuda ? '−' : '+'}{formatMoneyShort(Math.abs(carryOver))}
               </Typography>
               <Typography sx={{ fontSize: 11, color: T2 }}>
-                {esDeuda ? 'deuda de' : 'de'} {MES_NAMES[parseInt(mes.replace('M','')) - 2] || 'antes'}
+                {esDeuda ? 'deuda de' : 'de'} {nombreMes(sumarMeses(mes, -1))}
               </Typography>
             </Box>
           )}
@@ -629,7 +635,7 @@ function InicioInner() {
                 </Box>
               ))}
               {metrics.tcEg > 0 && (() => {
-                const txsMes = (state.transacciones || []).filter(t => t.mes === mes)
+                const txsMes = filtrarPeriodo(state.transacciones, mes)
                 const tarjetasConCargos = [...new Set(
                   txsMes.filter(t => t.cuenta === 'T.C' && t.movimiento === 'Egreso' && t.categoria !== 'Pago TC')
                         .map(t => t.tarjeta || '(sin asignar)')
@@ -696,7 +702,7 @@ function InicioInner() {
                       <Typography sx={{ fontSize: 12, color: T1 }}>
                         Resultado de {mesNombre}: <strong style={{ color: balance >= 0 ? GREEN : RED }}>{formatMoney(balance)}</strong>
                         {hayCarryOver && (
-                          <> {carryOver >= 0 ? '+' : '−'} {formatMoney(Math.abs(carryOver))} de {mesNombre === MES_NAMES[0] ? 'antes' : 'meses anteriores'}</>
+                          <> {carryOver >= 0 ? '+' : '−'} {formatMoney(Math.abs(carryOver))} de {getCierre(sumarMeses(mes, -1)) ? 'meses anteriores' : 'antes'}</>
                         )}
                       </Typography>
                       <Typography sx={{ fontSize: 12, color: T1 }}>

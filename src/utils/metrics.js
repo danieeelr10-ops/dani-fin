@@ -1,5 +1,9 @@
-export function computeMetrics(transacciones, mes) {
-  const txs = transacciones.filter(t => t.mes === mes);
+import { filtrarPeriodo, periodoDe } from './periodo.js';
+
+// `mes` es una clave de periodo ('M1' = enero 2026, '2027-M1' = enero 2027 —
+// ver utils/periodo.js). También acepta (mes 'M1', anio 2027) por separado.
+export function computeMetrics(transacciones, mes, anio) {
+  const txs = filtrarPeriodo(transacciones, anio != null ? periodoDe(anio, mes) : mes);
 
   // Excluir 'Pago TC' de ingresos y egresos base — son transferencias internas
   const ing  = txs.filter(t => t.movimiento === 'Ingreso' && t.categoria !== 'Pago TC').reduce((s, t) => s + Math.abs(t.total), 0);

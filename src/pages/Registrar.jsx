@@ -6,7 +6,12 @@ import { useSnackbar } from 'src/context/SnackbarContext';
 import { parsearVoz, inferirCategoria } from 'src/utils/parsers';
 import { getMesActual } from 'src/utils/format';
 import { computeProyeccionMes } from 'src/utils/cashflow';
-import { CAT_ICONS, CATEGORIAS_VOZ, MESES, MES_NAMES } from 'src/constants';
+import { CAT_ICONS, CATEGORIAS_VOZ, MES_NAMES } from 'src/constants';
+import {
+  periodoDeFecha, periodoParaTC, camposPeriodo, esDelPeriodo, filtrarPeriodo,
+  sumarMeses, nombreMes, anioDePeriodo, mesNumDePeriodo, periodoDe, periodosDelAnio,
+} from 'src/utils/periodo';
+import AnioSelector from 'src/components/AnioSelector';
 
 const BG      = '#F7F7F8'
 const CARD    = '#FFFFFF'
@@ -27,17 +32,9 @@ function fmtCOP(n) {
 function todayStr() {
   return new Date().toLocaleDateString('en-CA');
 }
-function dateToMes(dateStr) {
-  return 'M' + parseInt(dateStr.split('-')[1], 10);
-}
-function getMesParaTC(fechaStr, tarjetaObj) {
-  const corte = tarjetaObj?.fechaCorte != null ? parseInt(tarjetaObj.fechaCorte, 10) : 0;
-  if (!corte || corte < 1) return dateToMes(fechaStr);
-  const parts = fechaStr.split('-');
-  const month = parseInt(parts[1], 10);
-  const day   = parseInt(parts[2], 10);
-  return day > corte ? 'M' + (month === 12 ? 1 : month + 1) : 'M' + month;
-}
+// Periodo (mes + año) de una fecha 'YYYY-MM-DD' — ver utils/periodo.js
+const dateToMes    = periodoDeFecha;
+const getMesParaTC = periodoParaTC;
 function fmtDateLabel(dateStr) {
   const today = todayStr();
   const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-CA');
@@ -200,7 +197,7 @@ function CategoryAccordion({ cat, items, presupuesto, pagadoCat, txById, mes, es
     const pagos = item.pagos?.length ? item.pagos : (item.txId ? [{ txId: item.txId }] : []);
     return pagos.reduce((s, p) => {
       const tx = txById[p.txId];
-      return s + (tx && tx.mes === mes ? Math.abs(tx.total) : 0);
+      return s + (tx && esDelPeriodo(tx, mes) ? Math.abs(tx.total) : 0);
     }, 0);
   }
 
@@ -391,7 +388,7 @@ function PaySheet({ sel, state, onClose, onConfirm }) {
           const mesCalendario = dateToMes(fecha);
           const mesConCorte   = getMesParaTC(fecha, tcObj);
           if (mesConCorte === mesCalendario) return null;
-          const mesNombre = MES_NAMES[MESES.indexOf(mesConCorte)];
+          const mesNombre = nombreMes(mesConCorte);
           return (
             <Box sx={{ mb: 2, px: 1.25, py: 0.875, borderRadius: '8px', bgcolor: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.35)', display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>
               <Typography sx={{ fontSize: 14, lineHeight: 1, flexShrink: 0 }}>💳</Typography>
@@ -449,20 +446,21 @@ function IngresoRecibido({ tx }) {
 
 // ── Tab: Mis pagos ─────────────────────────────────────────
 function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoItem, deletePresupuestoItem, showToast }) {
-  const { getCarryOver } = useFinanzas();
+  const { getCarryOver, aniosDisponibles } = useFinanzas();
   const [mes, setMes] = useState(getMesActual());
   const [colTab, setColTab] = useState('izq');
-  const mesIdx = MESES.indexOf(mes);
+  const mesIdx = mesNumDePeriodo(mes) - 1;
+  const anio   = anioDePeriodo(mes);
 
   function moverItemAlSiguienteMes(item) {
-    const nextMes = MESES[Math.min(mesIdx + 1, MESES.length - 1)];
+    const nextMes = sumarMeses(mes, 1); // diciembre → enero del año siguiente
     deletePresupuestoItem(mes, item.id);
     addPresupuestoItem(nextMes, { concepto: item.concepto, categoria: item.categoria, monto: item.monto });
-    showToast(`${item.concepto} movido a ${MES_NAMES[MESES.indexOf(nextMes)]}`, 'success');
+    showToast(`${item.concepto} movido a ${nombreMes(nextMes)}`, 'success');
   }
 
   const presupMes = state.presupuestos?.[mes] || {};
-  const txsMes = useMemo(() => state.transacciones.filter(t => t.mes === mes), [state.transacciones, mes]);
+  const txsMes = useMemo(() => filtrarPeriodo(state.transacciones, mes), [state.transacciones, mes]);
 
   // Calcular lo ya pagado por categoría (solo Egresos)
   const pagadoPorCat = useMemo(() => {
@@ -565,7 +563,7 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
       addTransaccion({
         id: Date.now(),
         fecha: new Date(fecha + 'T12:00:00').toISOString(),
-        mes: mes2,
+        ...camposPeriodo(mes2),
         tipo: esIngreso ? 'Variable' : (state.categoriasEgresoFijo.includes(catFinal) ? 'Fijo' : 'Variable'),
         movimiento: esIngreso ? 'Ingreso' : 'Egreso',
         categoria: catFinal,
@@ -586,9 +584,11 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
   return (
     <Box sx={{ px: '20px', pb: 10 }}>
 
-      {/* Selector de mes */}
-      <Box sx={{ display: 'flex', gap: 0.625, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, mb: 2.5, pb: 0.5 }}>
-        {MESES.map((m, i) => (
+      {/* Selector de año y mes */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.625, mb: 2.5, pb: 0.5 }}>
+      <AnioSelector anio={anio} anios={aniosDisponibles} onChange={a => setMes(periodoDe(a, mesIdx + 1))} />
+      <Box sx={{ display: 'flex', gap: 0.625, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, minWidth: 0, flex: 1 }}>
+        {periodosDelAnio(anio).map((m, i) => (
           <Box key={m} onClick={() => setMes(m)} sx={{
             px: 1.5, py: 0.5, borderRadius: '20px', fontSize: 12, fontWeight: 600,
             whiteSpace: 'nowrap', cursor: 'pointer', border: '1px solid', flexShrink: 0, transition: 'all 0.15s',
@@ -597,6 +597,7 @@ function MisPagos({ state, addTransaccion, pagarPresupuestoItem, addPresupuestoI
             {MES_NAMES[i]}
           </Box>
         ))}
+      </Box>
       </Box>
 
       {/* ── Resumen del mes ── */}
@@ -808,7 +809,7 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
     const mesCalendario = dateToMes(fecha);
     const mesConCorte   = getMesParaTC(fecha, tcObj);
     if (mesConCorte === mesCalendario) return null;
-    return { mesNombre: MES_NAMES[MESES.indexOf(mesConCorte)], corte: tcObj.fechaCorte, tarjetaNombre: tcObj.nombre };
+    return { mesNombre: nombreMes(mesConCorte), corte: tcObj.fechaCorte, tarjetaNombre: tcObj.nombre };
   }, [cuenta, tarjeta, fecha, tarjetas]);
 
   function inferirDesdeTexto(texto) {
@@ -869,7 +870,7 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
     const mesVal       = _tcObj ? getMesParaTC(fechaVal, _tcObj) : dateToMes(fechaVal);
 
     addTransaccion({
-      id: Date.now(), fecha: new Date(fechaVal + 'T12:00:00').toISOString(), mes: mesVal,
+      id: Date.now(), fecha: new Date(fechaVal + 'T12:00:00').toISOString(), ...camposPeriodo(mesVal),
       tipo: tipoMovVal, movimiento: tipoVal,
       categoria: catVal, concepto: conceptoVal || catVal,
       total: montoFinal, pago: pagoVal, saldo: montoFinal - pagoVal,
@@ -882,8 +883,8 @@ function FormRegistrar({ state, addTransaccion, showToast }) {
 
     const presupuestoMes = state.presupuestos[mesVal] || {};
     if (tipoVal === 'Egreso' && presupuestoMes[catVal]) {
-      const txsMes = [...state.transacciones, { movimiento: tipoVal, categoria: catVal, total: montoFinal, mes: mesVal }];
-      const gastado = txsMes.filter(t => t.mes === mesVal && t.movimiento === 'Egreso' && t.categoria === catVal).reduce((s, t) => s + Math.abs(t.total), 0);
+      const txsMes = [...state.transacciones, { movimiento: tipoVal, categoria: catVal, total: montoFinal, ...camposPeriodo(mesVal) }];
+      const gastado = filtrarPeriodo(txsMes, mesVal).filter(t => t.movimiento === 'Egreso' && t.categoria === catVal).reduce((s, t) => s + Math.abs(t.total), 0);
       const limite = presupuestoMes[catVal];
       if (gastado >= limite)            showToast(`${catVal}: presupuesto superado`, 'error');
       else if (gastado >= limite * 0.8) showToast(`${catVal}: 80% del presupuesto`, 'error');

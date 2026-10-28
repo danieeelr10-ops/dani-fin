@@ -6,7 +6,7 @@ import { useFinanzas } from 'src/context/FinanzasContext';
 import { computeMetrics } from 'src/utils/metrics';
 import { computeDisponibleHoy, computePorCobrar, computeProximosPagos, computeIngresoStats, computeAlertas } from 'src/utils/cashflow';
 import { formatMoney, formatMoneyShort, getMesActual } from 'src/utils/format';
-import { MESES, MES_NAMES } from 'src/constants';
+import { sumarMeses, etiquetaPeriodo } from 'src/utils/periodo';
 
 // ── Constantes de diseño ──────────────────────────────────────
 const BG      = '#F7F7F8'
@@ -32,13 +32,15 @@ const SUGERENCIAS = [
 function buildContext(state, carryOver = 0) {
   const mes     = getMesActual();
   const m       = computeMetrics(state.transacciones, mes);
-  const mesName = MES_NAMES[MESES.indexOf(mes)];
+  const mesName = etiquetaPeriodo(mes); // "Ene 2027": con año, para que la IA no mezcle años
   const txs     = state.transacciones || [];
 
-  const mesesConDatos = MESES.filter(ms => computeMetrics(txs, ms).hasData);
+  // Últimos 12 meses (cruzando el cambio de año) + los próximos 3 si ya tienen movimientos
+  const ventana       = Array.from({ length: 15 }, (_, i) => sumarMeses(mes, i - 11));
+  const mesesConDatos = ventana.filter(ms => computeMetrics(txs, ms).hasData);
   const resumenMeses  = mesesConDatos.map(ms => {
     const met = computeMetrics(txs, ms);
-    return `${MES_NAMES[MESES.indexOf(ms)]}: Ing ${formatMoneyShort(met.ing)}, Eg ${formatMoneyShort(met.eg)}, Neto ${formatMoneyShort(met.neto)}, Ahorro ${(met.tasaAhorro * 100).toFixed(1)}%`;
+    return `${etiquetaPeriodo(ms)}: Ing ${formatMoneyShort(met.ing)}, Eg ${formatMoneyShort(met.eg)}, Neto ${formatMoneyShort(met.neto)}, Ahorro ${(met.tasaAhorro * 100).toFixed(1)}%`;
   }).join('\n');
 
   const catsByCat    = Object.entries(m.byCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `  ${c}: ${formatMoney(v)}`).join('\n');
@@ -67,7 +69,7 @@ function buildContext(state, carryOver = 0) {
 
   const tendenciaLabels = { crecimiento: 'Creciendo ↑', estabilidad: 'Estable →', caida: 'Bajando ↓', insuficiente: 'Sin datos suficientes' };
 
-  return `DATOS FINANCIEROS — ${mesName} 2026
+  return `DATOS FINANCIEROS — ${mesName}
 
 LIQUIDEZ ACTUAL:
 - Disponible hoy: ${formatMoney(disponible)}

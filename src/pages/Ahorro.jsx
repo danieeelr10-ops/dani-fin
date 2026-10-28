@@ -5,7 +5,9 @@ import { useFinanzas } from 'src/context/FinanzasContext';
 import { useSnackbar } from 'src/context/SnackbarContext';
 import { computeMetrics } from 'src/utils/metrics';
 import { formatMoney, formatMoneyShort, formatFechaShort } from 'src/utils/format';
-import { MESES, MES_NAMES } from 'src/constants';
+import { MES_NAMES } from 'src/constants';
+import { periodosDelAnio, filtrarPeriodo, sumarMeses, mesNumDePeriodo } from 'src/utils/periodo';
+import AnioSelector from 'src/components/AnioSelector';
 
 const BG      = '#F7F7F8';
 const CARD    = '#FFFFFF';
@@ -26,14 +28,15 @@ function fmtInput(n) {
 
 export default function Ahorro() {
   const navigate = useNavigate();
-  const { state, mesActivo, setMesActivo, updateMeta } = useFinanzas();
+  const { state, mesActivo, setMesActivo, anioActivo, setAnioActivo, aniosDisponibles, updateMeta } = useFinanzas();
   const { showSnackbar } = useSnackbar();
   const [editandoMeta, setEditandoMeta] = useState(false);
   const [metaInput, setMetaInput]       = useState('');
 
   const mes       = mesActivo;
-  const mesIdx    = MESES.indexOf(mes);
+  const mesIdx    = mesNumDePeriodo(mes) - 1;
   const mesNombre = MES_NAMES[mesIdx];
+  const mesesDelAnio = useMemo(() => periodosDelAnio(anioActivo), [anioActivo]);
 
   // ── Ahorro real por mes = transacciones categoría "Ahorro" ──────────
   function ahorroDeMes(m) {
@@ -50,38 +53,39 @@ export default function Ahorro() {
 
   // ── Historial mes a mes (solo meses con meta o movimiento) ──────────
   const historial = useMemo(() => {
-    return MESES.map((m, i) => {
+    return mesesDelAnio.map((m, i) => {
       const meta = state.metas?.[m]?.ahorro || 0;
       const real = ahorroDeMes(m);
       return { mes: m, nombre: MES_NAMES[i], meta, real };
     }).filter(h => h.meta > 0 || h.real > 0);
-  }, [state.metas, state.transacciones]);
+  }, [state.metas, state.transacciones, mesesDelAnio]);
 
   const totalAhorrado = useMemo(() =>
-    MESES.reduce((s, m) => s + ahorroDeMes(m), 0),
-    [state.metas, state.transacciones]
+    mesesDelAnio.reduce((s, m) => s + ahorroDeMes(m), 0),
+    [state.metas, state.transacciones, mesesDelAnio]
   );
   const totalMeta = useMemo(() =>
-    MESES.reduce((s, m) => s + (state.metas?.[m]?.ahorro || 0), 0),
-    [state.metas]
+    mesesDelAnio.reduce((s, m) => s + (state.metas?.[m]?.ahorro || 0), 0),
+    [state.metas, mesesDelAnio]
   );
 
   // ── Racha: meses consecutivos cumpliendo la meta, hacia atrás desde el mes activo ──
   const racha = useMemo(() => {
+    // Cruza el cambio de año (enero sigue la racha de diciembre); se corta
+    // en el primer mes sin meta, así que el límite de iteraciones es solo un tope
     let streak = 0;
-    for (let i = mesIdx; i >= 0; i--) {
-      const m = MESES[i];
+    for (let i = 0, m = mes; i < 600; i++, m = sumarMeses(m, -1)) {
       const meta = state.metas?.[m]?.ahorro || 0;
       if (meta === 0) break;
       if (ahorroDeMes(m) >= meta) streak++; else break;
     }
     return streak;
-  }, [state.metas, state.transacciones, mesIdx]);
+  }, [state.metas, state.transacciones, mes]);
 
   // ── Ledger: movimientos reales de "Ahorro" del mes activo ───────────
   const movimientos = useMemo(() =>
-    (state.transacciones || [])
-      .filter(t => t.categoria === 'Ahorro' && t.mes === mes)
+    filtrarPeriodo(state.transacciones, mes)
+      .filter(t => t.categoria === 'Ahorro')
       .sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0)),
     [state.transacciones, mes]
   );
@@ -111,9 +115,11 @@ export default function Ahorro() {
           </Typography>
         </Box>
 
-        {/* Selector de mes */}
-        <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, mb: 2.5, pb: 0.5 }}>
-          {MESES.map((m, i) => {
+        {/* Selector de año y mes */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 2.5, pb: 0.5 }}>
+        <AnioSelector anio={anioActivo} anios={aniosDisponibles} onChange={setAnioActivo} />
+        <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, minWidth: 0, flex: 1 }}>
+          {mesesDelAnio.map((m, i) => {
             const activo = m === mes;
             return (
               <Box key={m} onClick={() => setMesActivo(m)} sx={{
@@ -127,6 +133,7 @@ export default function Ahorro() {
               </Box>
             );
           })}
+        </Box>
         </Box>
 
         {/* ── Hero: progreso del mes activo ── */}
@@ -205,7 +212,7 @@ export default function Ahorro() {
         {/* ── Total acumulado del año ── */}
         <Box sx={{ bgcolor: CARD, borderRadius: '16px', boxShadow: CARD_SH, p: 2.5, mb: 2 }}>
           <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
-            Total ahorrado este año
+            Total ahorrado en {anioActivo}
           </Typography>
           <Typography sx={{ fontSize: 26, fontWeight: 800, color: GREEN, letterSpacing: '-0.5px', lineHeight: 1 }}>
             {formatMoney(totalAhorrado)}

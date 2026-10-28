@@ -5,7 +5,7 @@ import { useFinanzas } from 'src/context/FinanzasContext';
 import { useSnackbar } from 'src/context/SnackbarContext';
 import { computePorCobrar, computeIngresoStats, diasHasta } from 'src/utils/cashflow';
 import { formatMoney, formatMoneyShort, getMesActual } from 'src/utils/format';
-import { MES_NAMES, MESES } from 'src/constants';
+import { periodoDeRegistro, filtrarPeriodo, sumarMeses, fechaInicioPeriodo, camposPeriodo, nombreMes } from 'src/utils/periodo';
 
 const BG      = '#F7F7F8';
 const CARD    = '#FFFFFF';
@@ -111,8 +111,7 @@ export default function Cobros() {
   }), [porCobrar.pendientes]);
 
   // Cobros ya recibidos este mes (para historial)
-  const cobrosRecibidos = useMemo(() => txs.filter(t =>
-    t.mes === mes &&
+  const cobrosRecibidos = useMemo(() => filtrarPeriodo(txs, mes).filter(t =>
     t.movimiento === 'Ingreso' &&
     t.estado === 'realizado' &&
     !t.esFuturo &&
@@ -147,16 +146,13 @@ export default function Cobros() {
   }
 
   function pasarAlSiguienteMes(tx) {
-    const mesNum     = parseInt((tx.mes || mes).replace('M', ''));
-    const nextMesNum = Math.min(mesNum + 1, 12);
-    const nextMes    = `M${nextMesNum}`;
-    const year       = new Date().getFullYear();
-    const nextFecha  = `${year}-${String(nextMesNum).padStart(2, '0')}-01T12:00:00`;
-    updateTransaccion(tx.id, { mes: nextMes, fecha: nextFecha });
-    showToast(`Movido a ${MES_NAMES[nextMesNum - 1]}`, 'success');
+    // Diciembre pasa a enero del año siguiente
+    const nextMes = sumarMeses(periodoDeRegistro(tx) || mes, 1);
+    updateTransaccion(tx.id, { ...camposPeriodo(nextMes), fecha: fechaInicioPeriodo(nextMes) });
+    showToast(`Movido a ${nombreMes(nextMes)}`, 'success');
   }
 
-  const mesNombre = MES_NAMES[MESES.indexOf(mes)];
+  const mesNombre = nombreMes(mes);
 
   return (
     <>

@@ -11,7 +11,9 @@ import { computeMetrics } from 'src/utils/metrics';
 import { computeIngresoStats } from 'src/utils/cashflow';
 import { formatMoney, formatMoneyShort } from 'src/utils/format';
 import { inferirCategoria } from 'src/utils/parsers';
-import { MESES, MES_NAMES, CAT_ICONS, CAT_COLORS, CATEGORIAS_VOZ } from 'src/constants';
+import { MES_NAMES, CAT_ICONS, CAT_COLORS, CATEGORIAS_VOZ } from 'src/constants';
+import { periodosDelAnio, sumarMeses, nombreMes, etiquetaPeriodo, filtrarPeriodo } from 'src/utils/periodo';
+import AnioSelector from 'src/components/AnioSelector';
 
 const BG      = '#F7F7F8'
 const CARD_SH = '0 1px 3px rgba(0,0,0,0.07)'
@@ -666,7 +668,7 @@ function GuiaPresupuesto({ presupMes, catIngreso, catFijo, catVariable, navigate
 
 // ── Main ───────────────────────────────────────────────────
 export default function Presupuesto() {
-  const { state, savePresupuestoMes, copiarPresupuesto, savePlantilla, applyPlantilla, addPresupuestoItem, deletePresupuestoItem, updatePresupuestoItem, savePresupuestoTarjetas, pagarPresupuestoItem, despagarPresupuestoItem, deleteTransaccion, mesActivo, setMesActivo } = useFinanzas();
+  const { state, savePresupuestoMes, copiarPresupuesto, savePlantilla, applyPlantilla, addPresupuestoItem, deletePresupuestoItem, updatePresupuestoItem, savePresupuestoTarjetas, pagarPresupuestoItem, despagarPresupuestoItem, deleteTransaccion, mesActivo, setMesActivo, anioActivo, setAnioActivo, aniosDisponibles } = useFinanzas();
   const { showSnackbar } = useSnackbar();
   const navigate = useNavigate();
   const mes = mesActivo;
@@ -716,10 +718,11 @@ export default function Presupuesto() {
   const egPct  = totEg.budget  > 0 ? Math.round((totEg.actual  / totEg.budget)  * 100) : 0;
   const ingPct = totIng.budget > 0 ? Math.round((totIng.actual / totIng.budget) * 100) : 0;
 
-  const mesesConPresup = MESES.filter(m => Object.keys(state.presupuestos[m] || {}).some(k => (state.presupuestos[m][k] || 0) > 0));
-  const mesIdx      = MESES.indexOf(mes);
-  const mesAnterior = mesIdx > 0 ? MESES[mesIdx - 1] : null;
-  const tieneAnterior = mesAnterior && mesesConPresup.includes(mesAnterior);
+  const tienePresupuesto = m => Object.values(state.presupuestos[m] || {}).some(v => (v || 0) > 0);
+  const mesesConPresup = periodosDelAnio(anioActivo).filter(tienePresupuesto);
+  // Enero copia del diciembre del año anterior
+  const mesAnterior = sumarMeses(mes, -1);
+  const tieneAnterior = tienePresupuesto(mesAnterior);
 
   // ── ConfigForm — lista limpia + bottom sheet ───────────────
   function ConfigForm() {
@@ -739,7 +742,7 @@ export default function Presupuesto() {
 
     function handleCopiar() {
       copiarPresupuesto(mesAnterior, mes);
-      showSnackbar(`Copiado de ${MES_NAMES[MESES.indexOf(mesAnterior)]}`, 'success');
+      showSnackbar(`Copiado de ${nombreMes(mesAnterior)}`, 'success');
     }
 
     function handlePlantilla() {
@@ -790,7 +793,7 @@ export default function Presupuesto() {
         <Box sx={{ display: 'flex', gap: 1, mb: 2.5, flexWrap: 'wrap' }}>
           {tieneAnterior && (
             <Box component="button" onClick={handleCopiar} sx={{ px: 1.75, py: 0.75, borderRadius: '10px', border: `1px solid ${BORDER}`, cursor: 'pointer', bgcolor: '#fff', color: T2, fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>
-              📋 Copiar de {MES_NAMES[MESES.indexOf(mesAnterior)]}
+              📋 Copiar de {nombreMes(mesAnterior)}
             </Box>
           )}
           <Box component="button" onClick={handlePlantilla} sx={{ px: 1.75, py: 0.75, borderRadius: '10px', border: '1px solid rgba(0,167,111,0.3)', cursor: 'pointer', bgcolor: 'rgba(0,167,111,0.06)', color: GREEN, fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>
@@ -874,7 +877,7 @@ export default function Presupuesto() {
       return (
         <Box sx={{ bgcolor: '#fff', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', p: 3 }}>
           <Typography sx={{ fontSize: 15, fontWeight: 700, color: '#111318', mb: 0.5 }}>
-            Sin presupuesto para {MES_NAMES[MESES.indexOf(mes)]}
+            Sin presupuesto para {nombreMes(mes)}
           </Typography>
           <Typography sx={{ fontSize: 13, color: '#6B7280', mb: 2.5 }}>
             Elige una opción para empezar rápido:
@@ -895,7 +898,7 @@ export default function Presupuesto() {
               </Box>
             )}
             {tieneAnterior && (
-              <Box component="button" onClick={() => { copiarPresupuesto(mesAnterior, mes); showSnackbar(`Copiado de ${MES_NAMES[MESES.indexOf(mesAnterior)]}`, 'success'); }} sx={{
+              <Box component="button" onClick={() => { copiarPresupuesto(mesAnterior, mes); showSnackbar(`Copiado de ${nombreMes(mesAnterior)}`, 'success'); }} sx={{
                 width: '100%', py: 1.5, px: 2, borderRadius: '12px',
                 border: '1px solid #E5E7EB', bgcolor: '#F9FAFB', color: '#111318',
                 fontSize: 14, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
@@ -903,7 +906,7 @@ export default function Presupuesto() {
               }}>
                 <span style={{ fontSize: 20 }}>📋</span>
                 <Box>
-                  <div>Copiar de {MES_NAMES[MESES.indexOf(mesAnterior)]}</div>
+                  <div>Copiar de {nombreMes(mesAnterior)}</div>
                   <div style={{ fontSize: 11, fontWeight: 400, color: '#6B7280' }}>Copia los valores del mes anterior</div>
                 </Box>
               </Box>
@@ -994,7 +997,7 @@ export default function Presupuesto() {
     const items   = state.presupuestosDetalle[mes] || [];
     const cuentas = state.cuentas?.length ? state.cuentas : ['Efectivo', 'T.C'];
     const tarjetas = state.tarjetas || [];
-    const txsMes  = state.transacciones.filter(t => t.mes === mes);
+    const txsMes  = filtrarPeriodo(state.transacciones, mes);
 
     // Detectar si un item ya tiene transacción en la BD (por concepto + mes + movimiento)
     function txParaItem(item, esIngreso) {
@@ -1434,7 +1437,7 @@ export default function Presupuesto() {
         {/* Lista */}
         {items.length === 0 ? (
           <Box sx={{ bgcolor: '#fff', borderRadius: '16px', boxShadow: CARD_SH, p: 4, textAlign: 'center', border: `1px solid ${BORDER}` }}>
-            <Typography sx={{ fontSize: 14, fontWeight: 600, color: T1, mb: 0.5 }}>Sin conceptos para {MES_NAMES[MESES.indexOf(mes)]}</Typography>
+            <Typography sx={{ fontSize: 14, fontWeight: 600, color: T1, mb: 0.5 }}>Sin conceptos para {nombreMes(mes)}</Typography>
             <Typography sx={{ fontSize: 13, color: T2 }}>Agrega el primero con el formulario de arriba</Typography>
           </Box>
         ) : (
@@ -1497,7 +1500,7 @@ export default function Presupuesto() {
       <Box sx={{ pt: 3, pb: 2, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography sx={{ fontSize: 22, fontWeight: 700, color: T1, letterSpacing: '-0.3px' }}>Presupuesto</Typography>
-          <Typography sx={{ fontSize: 13, color: T2, mt: 0.25 }}>{MES_NAMES[MESES.indexOf(mes)]} 2026</Typography>
+          <Typography sx={{ fontSize: 13, color: T2, mt: 0.25 }}>{etiquetaPeriodo(mes)}</Typography>
         </Box>
         <Box sx={{ display: 'flex', bgcolor: '#EBEBEB', borderRadius: '10px', p: '3px', gap: '3px' }}>
           {[['pagar', 'Pagar'], ['configurar', 'Configurar'], ['registro', 'Detalle']].map(([key, label]) => (
@@ -1513,9 +1516,11 @@ export default function Presupuesto() {
         </Box>
       </Box>
 
-      {/* Pestañas de meses */}
-      <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, mb: 3, pb: 0.5 }}>
-        {MESES.map((m, i) => {
+      {/* Año + pestañas de meses */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 3, pb: 0.5 }}>
+      <AnioSelector anio={anioActivo} anios={aniosDisponibles} onChange={setAnioActivo} />
+      <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, minWidth: 0, flex: 1 }}>
+        {periodosDelAnio(anioActivo).map((m, i) => {
           const tienePresup = mesesConPresup.includes(m);
           const activo      = m === mes;
           return (
@@ -1534,6 +1539,7 @@ export default function Presupuesto() {
             </Box>
           );
         })}
+      </Box>
       </Box>
 
       {modo === 'pagar'      && <PagarView    key={mes} />}

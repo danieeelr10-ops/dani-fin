@@ -2,18 +2,7 @@ import { useState, useRef, useMemo } from 'react';
 import { Box, Typography, alpha } from '@mui/material';
 import { useFinanzas } from 'src/context/FinanzasContext';
 import { getMesActual, formatMoney } from 'src/utils/format';
-
-function dateToMes(dateStr) {
-  return 'M' + parseInt(dateStr.split('-')[1], 10);
-}
-function getMesParaTC(fechaStr, tarjetaObj) {
-  const corte = tarjetaObj?.fechaCorte != null ? parseInt(tarjetaObj.fechaCorte, 10) : 0;
-  if (!corte || corte < 1) return dateToMes(fechaStr);
-  const parts = fechaStr.split('-');
-  const month = parseInt(parts[1], 10);
-  const day   = parseInt(parts[2], 10);
-  return day > corte ? 'M' + (month === 12 ? 1 : month + 1) : 'M' + month;
-}
+import { periodoParaTC as getMesParaTC, camposPeriodo } from 'src/utils/periodo';
 
 // ── Constantes de diseño ──────────────────────────────────────
 const BG      = '#F7F7F8'
@@ -130,7 +119,7 @@ export default function Mercado() {
 
     const mercadoItems = selected.map((it, i) => ({
       id: batchId + i, nombre: it.nombre, precio: parsePrecio(it.precio),
-      cantidad: parseInt(it.cantidad, 10) || 1, fecha: now, mes,
+      cantidad: parseInt(it.cantidad, 10) || 1, fecha: now, ...camposPeriodo(mes),
     }));
 
     const transacciones = selected.map((it, i) => ({
@@ -140,7 +129,7 @@ export default function Mercado() {
       saldo: 0, categoria: 'Mercado', movimiento: 'Egreso', tipo: 'Variable',
       cuenta: cuentaFinal,
       ...(tarjetaFinal ? { tarjeta: tarjetaFinal } : {}),
-      fecha: now, mes, cantidad: parseInt(it.cantidad, 10) || 1,
+      fecha: now, ...camposPeriodo(mes), cantidad: parseInt(it.cantidad, 10) || 1,
     }));
 
     registrarMercado(mercadoItems, transacciones);

@@ -1,7 +1,8 @@
 // Utilidades de flujo de caja real
 // Separadas de metrics.js porque trabajan con proyecciones y estados de cobro
 
-import { computeMetrics } from './metrics';
+import { computeMetrics } from './metrics.js';
+import { filtrarPeriodo, sumarMeses } from './periodo.js';
 
 function todayStr() {
   return new Date().toLocaleDateString('en-CA');
@@ -18,7 +19,7 @@ function diasHasta(fechaStr) {
 // carryOver (saldo del mes anterior) + ingresos ya recibidos − egresos cash ya realizados
 export function computeDisponibleHoy(transacciones, mes, carryOver = 0) {
   const hoy = todayStr();
-  const txsMes = transacciones.filter(t => t.mes === mes);
+  const txsMes = filtrarPeriodo(transacciones, mes);
 
   const ingRecibidos = txsMes
     .filter(t =>
@@ -58,7 +59,7 @@ export function computeDisponibleHoy(transacciones, mes, carryOver = 0) {
 export function computeProyeccionMes(transacciones, mes, carryOver, presupMes, presupuestosDetalle, categoriasIngreso, categoriasEgresoFijo, categoriasEgresoVariable) {
   const m = computeMetrics(transacciones, mes);
   const disponibleHoy = computeDisponibleHoy(transacciones, mes, carryOver);
-  const txsMes = transacciones.filter(t => t.mes === mes);
+  const txsMes = filtrarPeriodo(transacciones, mes);
 
   const catsIngreso = Object.keys(presupMes).filter(k => categoriasIngreso?.includes(k) && (presupMes[k] || 0) > 0);
   const ingPres     = catsIngreso.reduce((s, k) => s + (presupMes[k] || 0), 0);
@@ -157,11 +158,8 @@ export function computeProximosPagos(transacciones, dias = 30) {
 
 // Estadísticas de ingresos variables: promedios, tendencia, rangos
 export function computeIngresoStats(transacciones, mesActual) {
-  const mesIdx = parseInt(mesActual.replace('M', '')) - 1;
-
-  const getIng = (mes) => transacciones
+  const getIng = (mes) => filtrarPeriodo(transacciones, mes)
     .filter(t =>
-      t.mes === mes &&
       t.movimiento === 'Ingreso' &&
       t.estado !== 'pendiente' &&
       !t.esFuturo &&
@@ -169,9 +167,8 @@ export function computeIngresoStats(transacciones, mesActual) {
     )
     .reduce((s, t) => s + Math.abs(t.total), 0);
 
-  // Meses anteriores al actual (excluye el mes en curso)
-  const mkMeses = (n) => Array.from({ length: n }, (_, i) => `M${mesIdx - i}`)
-    .filter(m => { const idx = parseInt(m.replace('M','')); return idx >= 1 && idx <= 12; });
+  // Meses anteriores al actual (excluye el mes en curso); cruzan el cambio de año
+  const mkMeses = (n) => Array.from({ length: n }, (_, i) => sumarMeses(mesActual, -(i + 1)));
 
   const meses3  = mkMeses(3);
   const meses6  = mkMeses(6);

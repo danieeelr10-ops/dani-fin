@@ -3,7 +3,9 @@ import { Box, Typography, alpha, Collapse } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useFinanzas } from 'src/context/FinanzasContext';
 import { formatMoney, formatFechaShort } from 'src/utils/format';
-import { MESES, MES_NAMES, CAT_ICONS } from 'src/constants';
+import { MES_NAMES, CAT_ICONS } from 'src/constants';
+import { parsePeriodo, periodosDelAnio, filtrarPeriodo, camposPeriodo, nombreMes, anioDePeriodo, mesNumDePeriodo, periodoDe } from 'src/utils/periodo';
+import AnioSelector from 'src/components/AnioSelector';
 
 const BG      = '#F7F7F8';
 const CARD    = '#FFFFFF';
@@ -26,7 +28,7 @@ function daysUntilNext(dia) {
 
 function getCicloInfo(mes, tarjeta) {
   if (!tarjeta.fechaCorte) return null;
-  const mesIdx = MESES.indexOf(mes);
+  const mesIdx = (parsePeriodo(mes)?.mesNum ?? 0) - 1;
   if (mesIdx < 0) return null;
   const prevIdx = mesIdx === 0 ? 11 : mesIdx - 1;
   const nextIdx = mesIdx === 11 ? 0 : mesIdx + 1;
@@ -323,16 +325,17 @@ function TarjetasConfig({ tarjetas }) {
 
 // ── Main ────────────────────────────────────────────────────
 export default function TC() {
-  const { state, saveTarjetas, addTransaccion, deleteTransaccion, mesActivo, liquidarTC } = useFinanzas();
+  const { state, saveTarjetas, addTransaccion, deleteTransaccion, mesActivo, aniosDisponibles, liquidarTC } = useFinanzas();
   const [mes, setMes] = useState(mesActivo);
+  const anio = anioDePeriodo(mes);
 
   const cuentas = state.cuentas || ['Nequi', 'Nu', 'Daviplata', 'Efectivo'];
 
   // Cargos de TC por tarjeta en el mes activo
   const txsPorTarjeta = useMemo(() => {
     const map = {};
-    state.transacciones
-      .filter(t => t.mes === mes && t.cuenta === 'T.C' && t.movimiento === 'Egreso' && t.categoria !== 'Pago TC')
+    filtrarPeriodo(state.transacciones, mes)
+      .filter(t => t.cuenta === 'T.C' && t.movimiento === 'Egreso' && t.categoria !== 'Pago TC')
       .forEach(t => {
         const key = t.tarjeta || '(sin asignar)';
         if (!map[key]) map[key] = [];
@@ -344,8 +347,8 @@ export default function TC() {
   // Pagos por tarjeta en el mes activo
   const pagosPorTarjeta = useMemo(() => {
     const map = {};
-    state.transacciones
-      .filter(t => t.mes === mes && t.categoria === 'Pago TC' && t.movimiento === 'Egreso')
+    filtrarPeriodo(state.transacciones, mes)
+      .filter(t => t.categoria === 'Pago TC' && t.movimiento === 'Egreso')
       .forEach(t => {
         const key = t.tarjeta || '';
         if (!map[key]) map[key] = [];
@@ -378,12 +381,14 @@ export default function TC() {
         {/* Header */}
         <Box sx={{ pt: 3, pb: 2 }}>
           <Typography sx={{ fontSize: 22, fontWeight: 700, color: T1, letterSpacing: '-0.3px' }}>Tarjetas de crédito</Typography>
-          <Typography sx={{ fontSize: 13, color: T2, mt: 0.25 }}>{MES_NAMES[MESES.indexOf(mes)]} · cargos y pagos</Typography>
+          <Typography sx={{ fontSize: 13, color: T2, mt: 0.25 }}>{nombreMes(mes)} {anio} · cargos y pagos</Typography>
         </Box>
 
-        {/* Selector de mes */}
-        <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, mb: 2.5, pb: 0.5 }}>
-          {MESES.map((m, i) => (
+        {/* Selector de año y mes */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 2.5, pb: 0.5 }}>
+        <AnioSelector anio={anio} anios={aniosDisponibles} onChange={a => setMes(periodoDe(a, mesNumDePeriodo(mes)))} />
+        <Box sx={{ display: 'flex', gap: 0.75, overflowX: 'auto', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' }, minWidth: 0, flex: 1 }}>
+          {periodosDelAnio(anio).map((m, i) => (
             <Box key={m} onClick={() => setMes(m)} sx={{
               px: 1.75, py: 0.625, borderRadius: '20px', fontSize: 12, fontWeight: 600,
               whiteSpace: 'nowrap', cursor: 'pointer', border: '1px solid', flexShrink: 0,
@@ -392,6 +397,7 @@ export default function TC() {
               {MES_NAMES[i]}
             </Box>
           ))}
+        </Box>
         </Box>
 
         {/* KPIs */}
@@ -417,7 +423,7 @@ export default function TC() {
         {(state.tarjetas || []).length > 0 && (
           <Box sx={{ mb: 1 }}>
             <Typography sx={{ fontSize: 11, fontWeight: 600, color: T2, textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1.5 }}>
-              Extracto · {MES_NAMES[MESES.indexOf(mes)]}
+              Extracto · {nombreMes(mes)}
             </Typography>
             {(state.tarjetas || []).map(t => (
               <ExtractoTarjeta
@@ -438,8 +444,8 @@ export default function TC() {
                 onPagar={(monto, cuenta, fecha) => {
                   const pagoId = Date.now();
                   const fechaISO = new Date(fecha + 'T12:00:00').toISOString();
-                  addTransaccion({ id: pagoId, pagoId, concepto: `Pago ${t.nombre}`, total: -monto, pago: -monto, saldo: 0, categoria: 'Pago TC', movimiento: 'Egreso', tipo: 'Fijo', cuenta, tarjeta: t.nombre, fecha: fechaISO, mes });
-                  addTransaccion({ id: pagoId + 1, pagoId, concepto: `Pago ${t.nombre}`, total: monto, pago: monto, saldo: 0, categoria: 'Pago TC', movimiento: 'Ingreso', tipo: 'Fijo', cuenta: 'T.C', tarjeta: t.nombre, fecha: fechaISO, mes });
+                  addTransaccion({ id: pagoId, pagoId, concepto: `Pago ${t.nombre}`, total: -monto, pago: -monto, saldo: 0, categoria: 'Pago TC', movimiento: 'Egreso', tipo: 'Fijo', cuenta, tarjeta: t.nombre, fecha: fechaISO, ...camposPeriodo(mes) });
+                  addTransaccion({ id: pagoId + 1, pagoId, concepto: `Pago ${t.nombre}`, total: monto, pago: monto, saldo: 0, categoria: 'Pago TC', movimiento: 'Ingreso', tipo: 'Fijo', cuenta: 'T.C', tarjeta: t.nombre, fecha: fechaISO, ...camposPeriodo(mes) });
                   liquidarTC(mes, t.nombre, cuenta);
                 }}
               />
