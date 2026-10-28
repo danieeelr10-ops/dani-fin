@@ -3,6 +3,7 @@ import { Box, Typography, alpha } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useFinanzas } from 'src/context/FinanzasContext';
+import { apiPost } from 'src/lib/apiFetch';
 import { computeMetrics } from 'src/utils/metrics';
 import { computeDisponibleHoy, computePorCobrar, computeProximosPagos, computeIngresoStats, computeAlertas } from 'src/utils/cashflow';
 import { formatMoney, formatMoneyShort, getMesActual } from 'src/utils/format';
@@ -162,12 +163,7 @@ export default function IA() {
     setLoading(true);
     try {
       const context = buildContext(state, carryOver);
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages.map(m => ({ role: m.role, content: m.content })), context }),
-      });
-      const data = await res.json();
+      const { data } = await apiPost('/api/chat', { messages: newMessages.map(m => ({ role: m.role, content: m.content })), context });
       setMessages(prev => [...prev, { role: 'assistant', content: data.text || data.error || 'Error al obtener respuesta' }]);
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Error de conexión. Verifica tu internet.' }]);

@@ -1,11 +1,21 @@
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
+import { json, requireUser, readJsonLimited } from './_auth.js';
+
+export const config = { runtime: 'edge' };
+
+export default async function handler(req) {
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+
+  const denied = await requireUser(req);
+  if (denied) return denied;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'API key no configurada' });
+  if (!apiKey) return json({ error: 'API key no configurada' }, 500);
 
-  const { image, mediaType } = req.body;
-  if (!image) return res.status(400).json({ error: 'Imagen requerida' });
+  // Imagen base64 ya comprimida por el frontend (~1400px); 4 MB sobra y queda bajo el tope de Vercel.
+  const parsed = await readJsonLimited(req, 4_000_000);
+  if (parsed.error) return parsed.error;
+  const { image, mediaType } = parsed.body;
+  if (!image || typeof image !== 'string') return json({ error: 'Imagen requerida' }, 400);
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -48,16 +58,15 @@ Reglas:
     const data = await response.json();
 
     if (!response.ok) {
-      return res.status(500).json({ error: data.error?.message || 'Error de API' });
+      return json({ error: data.error?.message || 'Error de API' }, 500);
     }
 
     const text = data.content[0].text.trim();
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return res.status(500).json({ error: 'No se pudo leer la factura' });
+    if (!jsonMatch) return json({ error: 'No se pudo leer la factura' }, 500);
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    res.json(parsed);
+    return json(JSON.parse(jsonMatch[0]));
   } catch (e) {
-    res.status(500).json({ error: 'Error procesando la imagen' });
+    return json({ error: 'Error procesando la imagen' }, 500);
   }
 }

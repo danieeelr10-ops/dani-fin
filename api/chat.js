@@ -1,9 +1,14 @@
+import { json, requireUser, readJsonLimited } from './_auth.js';
+
 export const config = { runtime: 'edge' };
 
 export default async function handler(req) {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
   }
+
+  const denied = await requireUser(req);
+  if (denied) return denied;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -12,7 +17,15 @@ export default async function handler(req) {
     });
   }
 
-  const { messages, context } = await req.json();
+  // Tope de tamaño: frena abusos con una sesión robada (el contexto financiero real pesa decenas de KB).
+  const parsed = await readJsonLimited(req, 200_000);
+  if (parsed.error) return parsed.error;
+  const { messages, context } = parsed.body;
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > 60
+      || messages.some(m => !m || typeof m.content !== 'string' || !['user', 'assistant'].includes(m.role))
+      || (context != null && typeof context !== 'string')) {
+    return json({ error: 'Petición inválida' }, 400);
+  }
 
   const systemPrompt = `Eres el asistente financiero personal de Dani, un asesor financiero experto que conoce sus finanzas al detalle.
 
@@ -62,7 +75,7 @@ ${context}`;
     }
 
     return new Response(JSON.stringify({ text: data.content[0].text }), {
-      status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      status: 200, headers: { 'Content-Type': 'application/json' }
     });
   } catch (e) {
     return new Response(JSON.stringify({ error: 'Error de conexión' }), {
