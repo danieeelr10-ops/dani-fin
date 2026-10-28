@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { Box, Typography, alpha } from '@mui/material';
 import { useFinanzas } from 'src/context/FinanzasContext';
+import { apiPost } from 'src/lib/apiFetch';
 import { getMesActual, formatMoney } from 'src/utils/format';
 import { periodoParaTC as getMesParaTC, camposPeriodo } from 'src/utils/periodo';
 
@@ -72,12 +73,7 @@ export default function Mercado() {
     setStep('loading');
     try {
       const image = await compressImage(file);
-      const res = await fetch('/api/mercado', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image, mediaType: 'image/jpeg' }),
-      });
-      const data = await res.json();
+      const { data } = await apiPost('/api/mercado', { image, mediaType: 'image/jpeg' });
       if (data.error) { setError(data.error); setStep('capture'); return; }
       if (!data.items?.length) { setError('No se encontraron productos en la factura.'); setStep('capture'); return; }
       const mapped = data.items.map((it, i) => ({ ...it, id: i, precio: parsePrecio(it.precio), cantidad: it.cantidad || 1 }));
