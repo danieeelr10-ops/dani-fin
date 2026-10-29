@@ -1062,8 +1062,8 @@ export default function Presupuesto() {
             {!isPaid ? (
               <Box onClick={() => isOpen ? setPagandoId(null) : abrirPago(item.id)}
                 sx={{ px: 1.75, py: 0.625, borderRadius: 1.5, border: '1.5px solid', cursor: 'pointer', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', transition: 'all 0.15s', flexShrink: 0,
-                  borderColor: isOpen ? 'primary.main' : alpha(accentOk, 0.5),
-                  bgcolor:     isOpen ? 'primary.main' : alpha(accentOk, 0.08),
+                  borderColor: isOpen ? 'primary.main' : alpha(GREEN, 0.5),
+                  bgcolor:     isOpen ? 'primary.main' : alpha(GREEN, 0.08),
                   color:       isOpen ? '#fff'          : 'primary.main',
                 }}>
                 {isOpen ? 'Cancelar' : esIngreso ? '✓ Recibido' : '✓ Pagar'}
